@@ -9,10 +9,16 @@ def choice_role_keyboard():
     :return:
     """
 
+    # markup = InlineKeyboardMarkup()
+    # markup.row_width = 2
+    # markup.add(InlineKeyboardButton("Студент", callback_data="choice_student"),
+    #            InlineKeyboardButton("Преподаватель", callback_data="choice_teacher"))
+
     markup = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 
     markup.add(KeyboardButton("Студент"))
     markup.add(KeyboardButton("Преподаватель"))
+
     return markup
 
 

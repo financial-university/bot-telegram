@@ -59,6 +59,25 @@ def teacher(message):
                      reply_markup=ReplyKeyboardRemove())
 
 
+@bot.message_handler(regexp="Сегодня|Завтра|Сегодня и завтра|Эта неделя|Следующая неделя")
+def schedule(message):
+    user = User.search_user(message.chat.id)
+    if user.search_id is not None:
+        if message.text == "Сегодня":
+            bot.send_message(message.chat.id, format_schedule(user, days=1))
+        elif message.text == "Завтра":
+            bot.send_message(message.chat.id, format_schedule(user, start_day=1, days=1))
+        elif message.text == "Сегодня и завтра":
+            bot.send_message(message.chat.id, format_schedule(user, days=2))
+        elif message.text == "Эта неделя":
+            bot.send_message(message.chat.id, format_schedule(user, days=7))
+        elif message.text == "Следующая неделя":
+            bot.send_message(message.chat.id, format_schedule(user, start_day=7, days=7))
+    else:
+        bot.send_message(message.chat.id, "Выберите группу, прежде чем запрашивать расписание")
+
+
+
 @bot.message_handler(content_types=["text"])
 def check_other_messages(message):
     """
@@ -68,7 +87,6 @@ def check_other_messages(message):
     :return:
     """
 
-    bot.send_message(message.chat.id, message.text)
     user = User.search_user(message.chat.id)
     if user.menu == "CHOICE_GROUP":
         group = get_group(message.text)

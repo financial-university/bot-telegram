@@ -9,7 +9,8 @@ db = declarative_base()
 session = scoped_session(sessionmaker(bind=engine))
 
 from app import models
-from app.workers import *
+from app.models import User
+from app.bot import *
 
 # db.metadata.drop_all()
 db.metadata.create_all(engine)

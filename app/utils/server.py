@@ -2,8 +2,6 @@ import requests
 import datetime
 from urllib.parse import quote
 
-from config import *
-
 
 class Data:
     """
@@ -129,11 +127,11 @@ def format_schedule(user, start_day: int = 0, days: int = 1, teacher_id: int = N
         if user.role == "student":
             schedule = get_schedule(user.search_id, date_start, date_end, type='group')
         elif user.role == "teacher":
-            schedule = get_schedule(teacher_id, date_start, date_end, type='lecturer')
+            schedule = get_schedule(user.search_id, date_start, date_end, type='lecturer')
         else:
             schedule = get_schedule(user.search_id, date_start, date_end, type='group')
     else:
-        schedule = get_schedule(teacher_id, date_start, date_end, type='lecturer')
+        schedule = get_schedule(user.search_id, date_start, date_end, type='lecturer')
 
     if schedule in ('Connection error', 'Server error', 'Not found', 'Refreshes', 'Error'):
         return schedule
@@ -178,7 +176,3 @@ def format_schedule(user, start_day: int = 0, days: int = 1, teacher_id: int = N
         text += "\n"
         date += datetime.timedelta(days=1)
     return text
-
-
-# print(get_group("иб18").data)
-# print(get_schedule(9309).data)

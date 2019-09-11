@@ -5,15 +5,17 @@ from sqlalchemy import Integer, String, Column, Boolean
 class User(db):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True, unique=True)
-    role = Column(String, default=None)
-    menu = Column(String, default="START")
-    search_id = Column(String, default=None)
-    subscription_time = Column(String, default=None)
-    subscription_days = Column(String, default=None)
-    subscription_group = Column(String, default=None)
-    show_location = Column(Boolean, default=False)
-    show_groups = Column(Boolean, default=False)
+    id = Column(Integer, primary_key=True, index=True, unique=True)  # ID записи в БД
+    role = Column(String, default=None)  # Роль пользователя "teacher" или "student"
+    menu = Column(String, default="START")  # Текущее меню пользователя
+    search_id = Column(String, default=None)  # ID группы или преподавателя
+    search_display = Column(String, default=None)  # Название группы или ФИО преподавателя
+    search_day = Column(String, default=None)  # Поле для поиска определенного дня
+    subscription_time = Column(String, default=None)   # Поле времени подписки
+    subscription_days = Column(String, default=None)   # Поле дня подписки
+    subscription_id = Column(String, default=None)    # Поле id подписки
+    show_location = Column(Boolean, default=False)    # Поле отвечающее за показ расположения корпуса
+    show_groups = Column(Boolean, default=False)    # Поле отвечающее за показ групп
 
     @classmethod
     def search_user(cls, id: int) -> 'User':

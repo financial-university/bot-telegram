@@ -102,11 +102,13 @@ def get_teacher(teacher_name: str) -> list or None:
     return Data(teachers)
 
 
-def format_schedule(user, start_day: int = 0, days: int = 1, teacher_id: int = None, date: datetime = None,
+def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = None,
+                    teacher_id: int = None, date: datetime = None,
                     text: str = "") -> str or None:
     """
     Форматирует расписание к виду который отправляет бот
 
+    :param group_id:
     :param teacher_id: id преподователя
     :param text: начальная строка, к которой прибавляется расписание
     :param start_day: начальная дата в количестве дней от сейчас
@@ -123,13 +125,17 @@ def format_schedule(user, start_day: int = 0, days: int = 1, teacher_id: int = N
         date_start = date
         date_end = date
 
-    if teacher_id is None:
+    if teacher_id is None and group_id is None:
         if user.role == "student":
             schedule = get_schedule(user.search_id, date_start, date_end, type='group')
         elif user.role == "teacher":
             schedule = get_schedule(user.search_id, date_start, date_end, type='lecturer')
         else:
             schedule = get_schedule(user.search_id, date_start, date_end, type='group')
+    elif teacher_id:
+        schedule = get_schedule(teacher_id, date_start, date_end, type='lecturer')
+    elif group_id:
+        schedule = get_schedule(group_id, date_start, date_end, type='group')
     else:
         schedule = get_schedule(user.search_id, date_start, date_end, type='lecturer')
 

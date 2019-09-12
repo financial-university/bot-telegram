@@ -1,21 +1,20 @@
-from app import db, session
-from sqlalchemy import Integer, String, Column, Boolean
+from app import db
 
 
-class User(db):
+class User(db.Model):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True, unique=True)  # ID записи в БД
-    role = Column(String, default=None)  # Роль пользователя "teacher" или "student"
-    menu = Column(String, default="START")  # Текущее меню пользователя
-    search_id = Column(String, default=None)  # ID группы или преподавателя
-    search_display = Column(String, default=None)  # Название группы или ФИО преподавателя
-    search_day = Column(String, default=None)  # Поле для поиска определенного дня
-    subscription_time = Column(String, default=None)   # Поле времени подписки
-    subscription_days = Column(String, default=None)   # Поле дня подписки
-    subscription_id = Column(String, default=None)    # Поле id подписки
-    show_location = Column(Boolean, default=False)    # Поле отвечающее за показ расположения корпуса
-    show_groups = Column(Boolean, default=False)    # Поле отвечающее за показ групп
+    id = db.Column(db.Integer, primary_key=True, index=True, unique=True)  # ID чата
+    role = db.Column(db.String, default=None)  # Роль пользователя "teacher" или "student"
+    menu = db.Column(db.String, default="START")  # Текущее меню пользователя
+    search_id = db.Column(db.String, default=None)  # ID группы или преподавателя
+    search_display = db.Column(db.String, default=None)  # Название группы или ФИО преподавателя
+    search_additional = db.Column(db.String, default=None)  # Поле для поиска
+    subscription_time = db.Column(db.String, default=None)   # Поле времени подписки
+    subscription_days = db.Column(db.String, default=None)   # Поле дня подписки
+    subscription_id = db.Column(db.String, default=None)    # Поле id подписки
+    show_location = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ расположения корпуса
+    show_groups = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ групп
 
     @classmethod
     def search_user(cls, id: int) -> 'User':
@@ -26,12 +25,12 @@ class User(db):
         :return:
         """
 
-        user = session.query(cls).filter_by(id=id).first()
+        user = db.session.query(cls).filter_by(id=id).first()
         if user:
             return user
         user = cls(id=id)
-        session.add(user)
-        session.commit()
+        db.session.add(user)
+        db.session.commit()
         return user
 
     @classmethod
@@ -47,5 +46,16 @@ class User(db):
         for key, value in data['data'].items():
             if hasattr(user, key):
                 setattr(user, key, value)
-        session.commit()
+        db.session.commit()
         return user
+
+    @classmethod
+    def filter_by_time(cls, time):
+        """
+        Ищет всех пользователей с временем подписки time
+
+        :param time:
+        :return:
+        """
+
+        return db.session.query(cls).filter_by(subscription_time=time).all()

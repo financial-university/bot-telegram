@@ -2,10 +2,11 @@ import os
 
 
 class Config(object):
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'telegram'
-    SQLALCHEMY_DATABASE_URI = "postgresql://postgres:postgres@localhost:5432/telegram"
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'bot'
+    SQLALCHEMY_DATABASE_URI = f"mysql+mysqlconnector://user:pass@ip/db"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
 token = ""
-proxy = "socks5://127.0.0.1:9050"
+url = "https://url/telegram/"
+proxy = ""

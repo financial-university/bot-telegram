@@ -66,7 +66,7 @@ def settings_keyboard(user):
 
     markup = ReplyKeyboardMarkup(row_width=2)
 
-    markup.add(KeyboardButton("Строки в расписании"))
+    markup.add(KeyboardButton("Отображение расписания"))
     if user.role and user.search_id and (user.subscription_time is None or user.subscription_time == "CHANGES"):
         markup.add(KeyboardButton("Подписаться на расписание"))
     else:

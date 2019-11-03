@@ -2,17 +2,17 @@ from app import db
 
 
 class User(db.Model):
-    __tablename__ = "users"
+    __tablename__ = "telegram_users"
 
     id = db.Column(db.Integer, primary_key=True, index=True, unique=True)  # ID чата
-    role = db.Column(db.String, default=None)  # Роль пользователя "teacher" или "student"
-    menu = db.Column(db.String, default="START")  # Текущее меню пользователя
-    search_id = db.Column(db.String, default=None)  # ID группы или преподавателя
-    search_display = db.Column(db.String, default=None)  # Название группы или ФИО преподавателя
-    search_additional = db.Column(db.String, default=None)  # Поле для поиска
-    subscription_time = db.Column(db.String, default=None)   # Поле времени подписки
-    subscription_days = db.Column(db.String, default=None)   # Поле дня подписки
-    subscription_id = db.Column(db.String, default=None)    # Поле id подписки
+    role = db.Column(db.String(256), default=None)  # Роль пользователя "teacher" или "student"
+    menu = db.Column(db.String(256), default="START")  # Текущее меню пользователя
+    search_id = db.Column(db.String(256), default=None)  # ID группы или преподавателя
+    search_display = db.Column(db.String(256), default=None)  # Название группы или ФИО преподавателя
+    search_additional = db.Column(db.String(256), default=None)  # Поле для поиска
+    subscription_time = db.Column(db.String(256), default=None)   # Поле времени подписки
+    subscription_days = db.Column(db.String(256), default=None)   # Поле дня подписки
+    subscription_id = db.Column(db.String(256), default=None)    # Поле id подписки
     show_location = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ расположения корпуса
     show_groups = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ групп
 

@@ -5,6 +5,7 @@ class User(db.Model):
     __tablename__ = "telegram_users"
 
     id = db.Column(db.Integer, primary_key=True, index=True, unique=True)  # ID чата
+    login = db.Column(db.String(256), default=None)  # Ник человека
     role = db.Column(db.String(256), default=None)  # Роль пользователя "teacher" или "student"
     menu = db.Column(db.String(256), default="START")  # Текущее меню пользователя
     search_id = db.Column(db.String(256), default=None)  # ID группы или преподавателя

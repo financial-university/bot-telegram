@@ -44,7 +44,7 @@ def search_keyboard(user):
     :return:
     """
 
-    markup = ReplyKeyboardMarkup(row_width=2)
+    markup = ReplyKeyboardMarkup(one_time_keyboard=True, row_width=2)
 
     if user.search_id:
         markup.add(KeyboardButton("Расписание на определенный день"))

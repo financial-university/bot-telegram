@@ -78,9 +78,11 @@ def get_schedule(id: str, date_start: datetime = None, date_end: datetime = None
         return Data.error('Not found')
     res = {}
     for i in request_json:
+        i['auditorium'] = i['auditorium'].replace('_', '-')  # FIXME Ждем конечные данные RUZ, а пока так :)
         res.setdefault(datetime.datetime.strptime(i['date'], '%Y.%m.%d').strftime('%d.%m.%Y'), []).append(
             dict(time_start=i['beginLesson'], time_end=i['endLesson'], name=i['discipline'], type=i['kindOfWork'],
-                 groups=i['stream'], audience=i['auditorium'], location=i['building'], teachers_name=i['lecturer']
+                 groups=i['stream'], group=i['group'], audience=i['auditorium'], location=i['building'],
+                 teachers_name=i['lecturer']
                  )
         )
     return Data({key: sorted(value, key=lambda x: x['time_start']) for key, value in res.items()})
@@ -154,15 +156,17 @@ def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = Non
         if text_date in schedule:
             for lesson in sorted(schedule[text_date], key=lambda x: x['time_start']):
                 text += f"\n⏱{lesson['time_start']} – {lesson['time_end']}⏱\n"
-                text += f"{lesson['name']}\n"
+                text += f"*{lesson['name']}*\n"
                 if lesson['type']:
                     text += f"{lesson['type']}\n"
-                if (teacher_id is not None or user.show_groups) and lesson['groups']:
-                    if len(lesson['groups'].split(', ')) > 1:
+                if (user.show_groups or teacher_id is not None) and (lesson['groups'] or lesson['group']):
+                    if lesson['groups']:
                         text += "Группы: "
+                        text += f"{lesson['groups'].strip().replace(', ', ',').replace(',', ', ')}\n"
                     else:
-                        text += "Группа: "
-                    text += f"{lesson['groups']}\n"
+                        if lesson['group']:
+                            text += "Группа: "
+                            text += f"{lesson['group'].strip()}\n"
                 if teacher_id is not None:
                     if lesson['audience']:
                         text += f"Кабинет: {lesson['audience']}, "
@@ -171,7 +175,7 @@ def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = Non
                     if lesson['audience']:
                         text += f"Где: {lesson['audience']}"
                     if user.show_location is True and lesson['location'] is not None:
-                        text += f", {lesson['location']}\n"
+                        text += f", _{lesson['location']}_\n"
                     else:
                         text += "\n"
                     if "teachers_name" in lesson:

@@ -1,35 +1,21 @@
 import schedule
 import telebot
 import logging
-import datetime
 import time
 import app.utils.telebot_calendar as telebot_calendar
 
-from threading import Thread
 from app.models import User
 from app.utils.keyboards import *
 from app.utils.server import *
-from config import token
+from config import API_TOKEN
 from telebot.types import ReplyKeyboardRemove
 
 logger = logging.getLogger(__name__)
 telebot.logger.setLevel(logging.DEBUG)
 logger.addHandler(telebot.logger)
 
-# PROXY
-# from telebot import apihelper
-# ip = "157.245.11.44"
-# port = 9050
-# apihelper.proxy = {
-#     'http': 'socks5h://{}:{}'.format(ip, port),
-#     'https': 'socks5h://{}:{}'.format(ip, port)
-# }
+bot = telebot.TeleBot(API_TOKEN)
 
-bot = telebot.TeleBot(token, threaded=False)
-
-bot.remove_webhook()
-
-time.sleep(0.5)
 
 # SPAM DICT
 users = dict()
@@ -427,10 +413,3 @@ def start_workers():
         time.sleep(1)
 
 
-workers_flow = Thread(target=start_workers).start()
-while True:
-    try:
-        bot.polling(none_stop=True)
-    except Exception as error:
-        print("Server Error: ", error)
-        time.sleep(1)

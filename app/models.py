@@ -2,7 +2,11 @@ from app import db
 
 
 class User(db.Model):
-    __tablename__ = "telegram_users"
+    __tablename__ = "users"
+    __table_args__ = {
+        'mysql_engine': 'InnoDB',
+        'mysql_row_format': 'DYNAMIC'
+    }
 
     id = db.Column(db.Integer, primary_key=True, index=True, unique=True)  # ID чата
     login = db.Column(db.String(256), default=None)  # Ник человека

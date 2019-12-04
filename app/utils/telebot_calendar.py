@@ -5,7 +5,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь",
           "Ноябрь", "Декабрь"]
-days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+days = [" Пн ", " Вт ", " Ср ", " Чт ", " Пт ", " Сб ", " Вс "]
 
 
 def create_callback_data(action: str, year: int, month: int, day: str) -> str:
@@ -55,7 +55,7 @@ def create_calendar(year: int = None, month: int = None) -> InlineKeyboardMarkup
             elif f"{now_day.day}.{now_day.month}.{now_day.year}" == f"{day}.{month}.{year}":
                 row.append(InlineKeyboardButton(f"({day})", callback_data=create_callback_data("DAY", year, month, day)))
             else:
-                row.append(InlineKeyboardButton(str(day), callback_data=create_callback_data("DAY", year, month, day)))
+                row.append(InlineKeyboardButton(f" {day} ", callback_data=create_callback_data("DAY", year, month, day)))
         keyboard.add(*row)
 
     keyboard.add(InlineKeyboardButton("<", callback_data=create_callback_data("PREVIOUS-MONTH", year, month, "")),

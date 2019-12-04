@@ -1,6 +1,7 @@
 import requests
 import datetime
 from urllib.parse import quote
+from app.utils.cache import timed_cache
 
 
 class Data:
@@ -33,6 +34,7 @@ def date_name(date: datetime) -> str:
     return ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"][date.weekday()]
 
 
+@timed_cache(seconds=10800)
 def get_group(group_name: str, return_all_groups: bool = False) -> Data:
     """
     Запрашивает группу у сервера
@@ -55,39 +57,7 @@ def get_group(group_name: str, return_all_groups: bool = False) -> Data:
         return Data((found_group[0]['label'].strip(), found_group[0]['id']))
 
 
-def get_schedule(id: str, date_start: datetime = None, date_end: datetime = None, type: str = 'group') -> Data:
-    """
-    Запрашивает расписание у сервера
-
-    :param id:
-    :param date_start:
-    :param date_end:
-    :param type: 'group' 'lecturer'
-    :return: {'dd.mm.yyyy': {'time_start': , 'time_end': , 'name': , 'type': , 'groups': , 'audience': , 'location': ,
-                             'teachers_name': }}
-    """
-
-    if not date_start:
-        date_start = datetime.datetime.today()
-    if not date_end:
-        date_end = datetime.datetime.today() + datetime.timedelta(days=1)
-    request = requests.get(f"http://ruz.fa.ru/api/schedule/{type}/{id}?start={date_start.strftime('%Y.%m.%d')}&"
-                           f"finish={date_end.strftime('%Y.%m.%d')}&lng=1")
-    request_json = request.json()
-    if not request_json:
-        return Data.error('Not found')
-    res = {}
-    for i in request_json:
-        i['auditorium'] = i['auditorium'].replace('_', '-')  # FIXME Ждем конечные данные RUZ, а пока так :)
-        res.setdefault(datetime.datetime.strptime(i['date'], '%Y.%m.%d').strftime('%d.%m.%Y'), []).append(
-            dict(time_start=i['beginLesson'], time_end=i['endLesson'], name=i['discipline'], type=i['kindOfWork'],
-                 groups=i['stream'], group=i['group'], audience=i['auditorium'], location=i['building'],
-                 teachers_name=i['lecturer']
-                 )
-        )
-    return Data({key: sorted(value, key=lambda x: x['time_start']) for key, value in res.items()})
-
-
+@timed_cache(seconds=10800)
 def get_teacher(teacher_name: str) -> list or None:
     """
     Поиск преподователя
@@ -104,6 +74,7 @@ def get_teacher(teacher_name: str) -> list or None:
     return Data(teachers)
 
 
+@timed_cache(seconds=300)
 def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = None,
                     teacher_id: int = None, date: datetime = None,
                     text: str = "") -> str or None:
@@ -186,3 +157,38 @@ def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = Non
         text += "\n"
         date += datetime.timedelta(days=1)
     return text
+
+
+def get_schedule(id: str, date_start: datetime = None, date_end: datetime = None, type: str = 'group') -> Data:
+    """
+    Запрашивает расписание у сервера
+
+    :param id:
+    :param date_start:
+    :param date_end:
+    :param type: 'group' 'lecturer'
+    :return: {'dd.mm.yyyy': {'time_start': , 'time_end': , 'name': , 'type': , 'groups': , 'audience': , 'location': ,
+                             'teachers_name': }}
+    """
+
+    if not date_start:
+        date_start = datetime.datetime.today()
+    if not date_end:
+        date_end = datetime.datetime.today() + datetime.timedelta(days=1)
+    url = f"http://ruz.fa.ru/api/schedule/{type}/{id}?start={date_start.strftime('%Y.%m.%d')}" \
+          f"&finish={date_end.strftime('%Y.%m.%d')}&lng=1"
+    request = requests.get(url)
+    request_json = request.json()
+    if not request_json:
+        return Data.error('Not found')
+    res = {}
+    for i in request_json:
+        i['auditorium'] = i['auditorium'].replace('_', '-')  # FIXME Ждем конечные данные RUZ, а пока так :)
+        res.setdefault(datetime.datetime.strptime(i['date'], '%Y.%m.%d').strftime('%d.%m.%Y'), []).append(
+            dict(time_start=i['beginLesson'], time_end=i['endLesson'], name=i['discipline'], type=i['kindOfWork'],
+                 groups=i['stream'], group=i['group'], audience=i['auditorium'], location=i['building'],
+                 teachers_name=i['lecturer']
+                 )
+        )
+
+    return Data({key: sorted(value, key=lambda x: x['time_start']) for key, value in res.items()})

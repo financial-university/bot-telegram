@@ -1,4 +1,4 @@
-from flask import Flask, request, abort
+from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from threading import Thread
 from config import Config, WEBHOOK_LISTEN, WEBHOOK_PORT, WEBHOOK_URL_BASE, WEBHOOK_URL_PATH
@@ -17,25 +17,30 @@ from app import models, bot
 from app.bot import *
 
 
-@app.route("/", methods=["GET", "HEAD"])
+@app.route('/', methods=['GET', 'HEAD'])
 def index():
-    return ""
+    return ''
 
 
-@app.route(WEBHOOK_URL_PATH, methods=["POST"])
+@app.route(WEBHOOK_URL_PATH, methods=['POST'])
 def webhook():
-    if request.headers.get("content-type") == "application/json":
-        json_string = request.get_data().decode("utf-8")
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
-        return ""
+        return ''
     else:
         abort(403)
 
 
-bot.remove_webhook()
+@app.route('/api/users_count', methods=['GET'])
+def users_count():
+    return jsonify(count=models.User.len())
 
-time.sleep(0.1)
+
+# bot.remove_webhook()
+
+time.sleep(1)
 
 bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
 

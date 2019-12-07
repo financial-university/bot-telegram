@@ -131,6 +131,8 @@ def calendar_query_handler(bot: 'bot', call: 'callback') -> tuple:
                               reply_markup=create_calendar(int(year), int(month)))
         return None, None
     elif action == "CANCEL":
+        bot.delete_message(chat_id=call.message.chat.id,
+                           message_id=call.message.message_id)
         return "CANCEL", None
     else:
         bot.answer_callback_query(callback_query_id=call.id, text="ERROR!")

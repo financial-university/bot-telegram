@@ -15,11 +15,11 @@ class User(db.Model):
     search_id = db.Column(db.String(256), default=None)  # ID группы или преподавателя
     search_display = db.Column(db.String(256), default=None)  # Название группы или ФИО преподавателя
     search_additional = db.Column(db.String(256), default=None)  # Поле для поиска
-    subscription_time = db.Column(db.String(256), default=None)   # Поле времени подписки
-    subscription_days = db.Column(db.String(256), default=None)   # Поле дня подписки
-    subscription_id = db.Column(db.String(256), default=None)    # Поле id подписки
-    show_location = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ расположения корпуса
-    show_groups = db.Column(db.Boolean, default=False)    # Поле отвечающее за показ групп
+    subscription_time = db.Column(db.String(256), default=None)  # Поле времени подписки
+    subscription_days = db.Column(db.String(256), default=None)  # Поле дня подписки
+    subscription_id = db.Column(db.String(256), default=None)  # Поле id подписки
+    show_location = db.Column(db.Boolean, default=False)  # Поле отвечающее за показ расположения корпуса
+    show_groups = db.Column(db.Boolean, default=False)  # Поле отвечающее за показ групп
 
     @classmethod
     def search_user(cls, id: int) -> 'User':
@@ -64,3 +64,13 @@ class User(db.Model):
         """
 
         return db.session.query(cls).filter_by(subscription_time=time).all()
+
+    @classmethod
+    def len(cls):
+        """
+        Возвращает кол-во записей в таблице
+
+        :return:
+        """
+
+        return db.session.query(cls).count()

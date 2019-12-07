@@ -2,7 +2,8 @@ import schedule
 import telebot
 import logging
 import time
-import app.utils.telebot_calendar as telebot_calendar
+import app.utils.calendar as telebot_calendar
+import app.utils.strings as strings
 
 from app.models import User
 from app.utils.keyboards import *
@@ -14,8 +15,7 @@ logger = logging.getLogger(__name__)
 telebot.logger.setLevel(logging.DEBUG)
 logger.addHandler(telebot.logger)
 
-bot = telebot.TeleBot(API_TOKEN)
-
+bot = telebot.TeleBot(API_TOKEN, threaded=False)
 
 # SPAM DICT
 users = dict()
@@ -33,14 +33,15 @@ def start_message(message):
     """
 
     user = User.search_user(message.chat.id)
-    text = "Привет!\n"
     if user.subscription_days:
-        text += "Ваша подписка сброшена\n"
+        text = "Ваша подписка сброшена\n"
+    else:
+        text = ""
     User.update_user(user=user, data=dict(id=message.chat.id, role=None, menu="START", search_id=None,
                                           search_display=None, subscription_time=None, subscription_days=None,
                                           subscription_id=None, show_location=False, show_groups=False,
                                           login=message.chat.username))
-    bot.send_message(message.chat.id, text + "\nДля просмотра раписания требутся выбрать кто ты",
+    bot.send_message(message.chat.id, text + strings.WELCOME,
                      reply_markup=choice_role_keyboard())
     users.update({message.chat.id: dict(time=datetime.datetime.today(),
                                         warnings=0,
@@ -59,12 +60,12 @@ def role_message(message):
     user = User.search_user(message.chat.id)
     if message.text == "Студент":
         User.update_user(user=user, data=dict(id=message.chat.id, role="student", menu="CHOICE_GROUP"))
-        bot.send_message(message.chat.id, "Напиши название своей группы\n\nНапример «ПИ18-1»",
+        bot.send_message(message.chat.id, strings.GROUP_EXAMPLE,
                          reply_markup=ReplyKeyboardRemove())
     elif message.text == "Преподаватель":
         User.update_user(user=user, data=dict(id=message.chat.id, role="teacher",
                                               menu="CHOICE_NAME", show_groups=True))
-        bot.send_message(message.chat.id, "Напиши свое ФИО\n\nНапример «Коротеев Михаил Викторович»",
+        bot.send_message(message.chat.id, strings.TEACHER_EXAMPLE,
                          reply_markup=ReplyKeyboardRemove())
 
 
@@ -107,7 +108,7 @@ def callback_inline(call):
                                      reply_markup=main_keyboard(user))
                 elif type_selected == "CANCEL":
                     User.update_user(user, data=dict(menu="MAIN_MENU", search_additional=None))
-                    bot.send_message(call.from_user.id, f"Выберите пункт в меню", reply_markup=main_keyboard(user))
+                    bot.send_message(call.from_user.id, strings.CHOOSE_MENU, reply_markup=main_keyboard(user))
 
 
 @bot.message_handler(content_types=["text"])
@@ -172,14 +173,14 @@ def check_other_messages(message):
                                  parse_mode="Markdown")
             elif message.text == "Поиск":
                 user = User.update_user(user, data=dict(menu="SEARCH_MENU"))
-                bot.send_message(message.chat.id, "Выбери пункт меню", reply_markup=search_keyboard(user))
+                bot.send_message(message.chat.id, strings.CHOOSE_MENU, reply_markup=search_keyboard(user))
             elif message.text == "≡ Настройки":
                 user = User.update_user(user, data=dict(menu="SETTINGS"))
-                bot.send_message(message.chat.id, "Выбери то, что требуется настроить",
+                bot.send_message(message.chat.id, strings.WHAT_TO_SET,
                                  reply_markup=settings_keyboard(user))
         else:
             if user.role is None:
-                bot.send_message(message.chat.id, "Выбери кто ты, прежде чем запрашивать расписание",
+                bot.send_message(message.chat.id, strings.WELCOME,
                                  reply_markup=choice_role_keyboard())
             else:
                 bot.send_message(message.chat.id, "Не удалось получить расписание", reply_markup=main_keyboard(user))
@@ -195,7 +196,7 @@ def check_other_messages(message):
                 user = User.update_user(user=user, data=dict(search_id=group.data[1],
                                                              search_display=group.data[0],
                                                              menu="MAIN_MENU"))
-                bot.send_message(message.chat.id, f"Ваша группа изменена на «{group.data[0]}»",
+                bot.send_message(message.chat.id, strings.GROUP_CHANGED_FOR.format(group.data[0]),
                                  reply_markup=main_keyboard(user))
         else:
             bot.send_message(message.chat.id, f"Не удалось найти вашу группу. Введите вашу группу еще раз",
@@ -250,7 +251,7 @@ def check_other_messages(message):
                                  format_schedule(user, start_day=7 - datetime.datetime.now().isoweekday() + 1,
                                                  days=7, group_id=int(user.search_additional)),
                                  parse_mode="Markdown")
-        bot.send_message(message.chat.id, "Выбери пункт меню", reply_markup=main_keyboard(user))
+        bot.send_message(message.chat.id, strings.CHOOSE_MENU, reply_markup=main_keyboard(user))
         User.update_user(user, data=dict(menu="MAIN_MENU", search_additional=None))
     elif user.menu == "CHOICE_NAME" or user.menu == "SEARCH_TEACHER":
         teachers = get_teacher(message.text)
@@ -258,26 +259,26 @@ def check_other_messages(message):
             if user.menu == "SEARCH_TEACHER":
                 User.update_user(user=user, data=dict(search_additional=teachers.data[0][0],
                                                       menu="SEARCH_TEACHER_DAY"))
-                bot.send_message(message.chat.id, f"Найденный преподаватель: «{teachers.data[0][1]}»",
+                bot.send_message(message.chat.id, strings.FOUND_TEACHER.format(teachers.data[0][1]),
                                  reply_markup=choice_day_keyboard())
             else:
                 User.update_user(user=user, data=dict(search_id=teachers.data[0][0],
                                                       search_display=teachers.data[0][1],
                                                       menu="MAIN_MENU"))
-                bot.send_message(message.chat.id, f"Пользователь: «{teachers.data[0][1]}»",
+                bot.send_message(message.chat.id, f"Пользователь изменен на «{teachers.data[0][1]}»",
                                  reply_markup=main_keyboard(user))
         else:
-            bot.send_message(message.chat.id, f"Введите ФИО еще раз",
+            bot.send_message(message.chat.id, f"Не удалось найти, введите ФИО еще раз",
                              reply_markup=ReplyKeyboardRemove())
     elif user.menu == "SEARCH_DAY" and user.search_additional == "CHANGES":
         user = User.update_user(user, data=dict(menu="MAIN_MENU", search_additional=None))
-        bot.send_message(message.chat.id, "Выберите пункт меню", reply_markup=main_keyboard(user))
+        bot.send_message(message.chat.id, strings.CHOOSE_MENU, reply_markup=main_keyboard(user))
     elif user.menu == "SETTINGS":
         if message.text == "← Назад":
             user = User.update_user(user, data=dict(menu="MAIN_MENU"))
-            bot.send_message(message.chat.id, "Выбери пункт меню", reply_markup=main_keyboard(user))
+            bot.send_message(message.chat.id, strings.CHOOSE_MENU, reply_markup=main_keyboard(user))
         elif message.text == "Отображение расписания":
-            bot.send_message(message.chat.id, "Тут ты можешь выбрать строки которые нужно показывать в расписании, "
+            bot.send_message(message.chat.id, "Тут вы можете выбрать строки которые нужно показывать в расписании, "
                                               "или выключить их показ",
                              reply_markup=display_in_schedule_keyboard(user))
         elif message.text == "Подписаться на расписание" or message.text == "Изменить подписку на расписание":
@@ -297,7 +298,7 @@ def check_other_messages(message):
     elif user.menu == "SEARCH_MENU":
         if message.text == "← Назад":
             user = User.update_user(user, data=dict(menu="MAIN_MENU"))
-            bot.send_message(message.chat.id, "Выбери пункт меню", reply_markup=main_keyboard(user))
+            bot.send_message(message.chat.id, strings.CHOOSE_MENU, reply_markup=main_keyboard(user))
         elif message.text == "Расписание на определенный день":
             User.update_user(user, data=dict(menu="SEARCH_DAY", search_additional="CHANGES"))
             now = datetime.datetime.now()
@@ -325,9 +326,9 @@ def check_other_messages(message):
                                                          subscription_days=None))
         if user.subscription_id is None:
             if message.text == "Отмена":
-                text = "Выбери пункт из меню"
+                text = strings.CHOOSE_MENU
             else:
-                text = "Не удалось добавить в рассылку расписания\nНеправильный формат даты"
+                text = strings.INCORRECT_DATE_FORMAT
             bot.send_message(message.chat.id, text, reply_markup=main_keyboard(user))
         else:
             user = User.update_user(user, data=dict(menu="SUBSCRIBE_CHOICE_DAY", subscription_time=subscribe_time))
@@ -356,7 +357,7 @@ def check_other_messages(message):
                                                          subscription_time=None,
                                                          subscription_days=None))
             if message.text == "Отмена":
-                text = "Выбери пункт из меню"
+                text = strings.CHOOSE_MENU
             else:
                 text = "Не удалось добавить в рассылку расписания\nНеправильный день"
             bot.send_message(message.chat.id, text, reply_markup=main_keyboard(user))

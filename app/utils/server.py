@@ -1,7 +1,15 @@
 import requests
 import datetime
+import logging
+
 from urllib.parse import quote
 from app.utils.cache import timed_cache
+from app.ruz.schemas import ScheduleSchema
+from marshmallow import ValidationError
+
+SCHEDULE_SCHEMA = ScheduleSchema()
+
+log = logging.getLogger(__name__)
 
 
 class Data:
@@ -34,7 +42,7 @@ def date_name(date: datetime) -> str:
     return ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"][date.weekday()]
 
 
-@timed_cache(seconds=10800)
+@timed_cache(minutes=180)
 def get_group(group_name: str, return_all_groups: bool = False) -> Data:
     """
     Запрашивает группу у сервера
@@ -57,7 +65,7 @@ def get_group(group_name: str, return_all_groups: bool = False) -> Data:
         return Data((found_group[0]['label'].strip(), found_group[0]['id']))
 
 
-@timed_cache(seconds=10800)
+@timed_cache(minutes=180)
 def get_teacher(teacher_name: str) -> list or None:
     """
     Поиск преподователя
@@ -74,7 +82,7 @@ def get_teacher(teacher_name: str) -> list or None:
     return Data(teachers)
 
 
-@timed_cache(seconds=300)
+@timed_cache(minutes=2)
 def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = None,
                     teacher_id: int = None, date: datetime = None,
                     text: str = "") -> str or None:
@@ -130,14 +138,10 @@ def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = Non
                 text += f"*{lesson['name']}*\n"
                 if lesson['type']:
                     text += f"{lesson['type']}\n"
-                if (user.show_groups or teacher_id is not None) and (lesson['groups'] or lesson['group']):
+                if (teacher_id is not None or user.show_groups) and lesson['groups']:
                     if lesson['groups']:
                         text += "Группы: "
-                        text += f"{lesson['groups'].strip().replace(', ', ',').replace(',', ', ')}\n"
-                    else:
-                        if lesson['group']:
-                            text += "Группа: "
-                            text += f"{lesson['group'].strip()}\n"
+                        text += f"{', '.join(lesson['groups'])}\n"
                 if teacher_id is not None:
                     if lesson['audience']:
                         text += f"Кабинет: {lesson['audience']}, "
@@ -177,18 +181,14 @@ def get_schedule(id: str, date_start: datetime = None, date_end: datetime = None
         date_end = datetime.datetime.today() + datetime.timedelta(days=1)
     url = f"http://ruz.fa.ru/api/schedule/{type}/{id}?start={date_start.strftime('%Y.%m.%d')}" \
           f"&finish={date_end.strftime('%Y.%m.%d')}&lng=1"
-    request = requests.get(url)
+    try:
+        request = requests.get(url)
+    except TimeoutError:
+        return Data.error('Timeout error')
     request_json = request.json()
-    if not request_json:
-        return Data.error('Not found')
-    res = {}
-    for i in request_json:
-        i['auditorium'] = i['auditorium'].replace('_', '-')  # FIXME Ждем конечные данные RUZ, а пока так :)
-        res.setdefault(datetime.datetime.strptime(i['date'], '%Y.%m.%d').strftime('%d.%m.%Y'), []).append(
-            dict(time_start=i['beginLesson'], time_end=i['endLesson'], name=i['discipline'], type=i['kindOfWork'],
-                 groups=i['stream'], group=i['group'], audience=i['auditorium'], location=i['building'],
-                 teachers_name=i['lecturer']
-                 )
-        )
-
-    return Data({key: sorted(value, key=lambda x: x['time_start']) for key, value in res.items()})
+    try:
+        res = SCHEDULE_SCHEMA.load({'pairs': request_json})
+        return Data(res)
+    except ValidationError as e:
+        log.warning('Validation error in get_schedule for %s %s - %r', type, id, e)
+        return Data.error('validation error')

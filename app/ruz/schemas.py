@@ -44,18 +44,19 @@ class ScheduleSchema(Schema):
 
     @post_load()
     def postload(self, data, **kwargs):
-        res = defaultdict(dict)
+        res = dict()
         for pairs in data['pairs']:
             for time_start, pair in pairs.items():
-                if time_start in res[pair['date']]:
-                    if res[pair['date']][time_start]['name'] == pair['name']:
-                        added = res[pair['date']][time_start]
-                        res[pair['date']][time_start].update(
-                            dict(
-                                audience=f"{added['audience']}, {pair['audience']}",
-                                groups=added['groups'].union(pair['groups']),
-                                teachers_name=f"{added['teachers_name']}, {pair['teachers_name']}"
-                            ))
-                        continue
-                res[pair['date']].update({time_start: pair})
-        return {date: sorted(pairs.values(), key=lambda x: x['time_start']) for date, pairs in res.items()}
+                if pair['date'] in res:
+                    for save_pair in res[pair['date']]:
+                        if save_pair['time_start'] == pair['time_start'] and save_pair['name'] == pair['name']:
+                            save_pair['audience'] = f"{save_pair['audience']}, {pair['audience']}"
+                            print(save_pair['groups'].union(pair['groups']))
+                            save_pair['groups'] = save_pair['groups'].union(pair['groups'])
+                            save_pair['teachers_name'] = f"{save_pair['teachers_name']}, {pair['teachers_name']}"
+                            break
+                    else:
+                        res[pair['date']] = res[pair['date']] + [pair]
+                else:
+                    res[pair['date']] = [pair]
+        return {date: sorted(pairs, key=lambda x: x['time_start']) for date, pairs in res.items()}

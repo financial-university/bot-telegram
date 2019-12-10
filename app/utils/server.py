@@ -133,8 +133,13 @@ def format_schedule(user, start_day: int = 0, days: int = 1, group_id: int = Non
         text_date = date.strftime('%d.%m.%Y')
         text += f"📅 {date_name(date)}, {text_date}\n"
         if text_date in schedule:
+            selected_days = set()
             for lesson in sorted(schedule[text_date], key=lambda x: x['time_start']):
-                text += f"\n⏱{lesson['time_start']} – {lesson['time_end']}⏱\n"
+                if lesson['time_start'] in selected_days:
+                    text += "\n"
+                else:
+                    text += f"\n⏱{lesson['time_start']} – {lesson['time_end']}⏱\n"
+                    selected_days.add(lesson['time_start'])
                 text += f"*{lesson['name']}*\n"
                 if lesson['type']:
                     text += f"{lesson['type']}\n"

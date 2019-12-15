@@ -1,7 +1,14 @@
+import logging
+import time
+from threading import Thread
+
+import telebot
 from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from threading import Thread
+
 from config import Config, WEBHOOK_LISTEN, WEBHOOK_PORT, WEBHOOK_URL_BASE, WEBHOOK_URL_PATH
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -13,8 +20,8 @@ from app.models import User
 # db.drop_all()
 db.create_all()
 
-from app import models, bot
-from app.bot import *
+from app import models
+from app.bot import start_workers, bot
 
 
 @app.route('/', methods=['GET', 'HEAD'])

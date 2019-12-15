@@ -3,9 +3,10 @@ import datetime
 import logging
 
 from urllib.parse import quote
+from marshmallow import ValidationError
+
 from app.utils.cache import timed_cache
 from app.ruz.schemas import ScheduleSchema
-from marshmallow import ValidationError
 
 SCHEDULE_SCHEMA = ScheduleSchema()
 

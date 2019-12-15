@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import datetime
 
 from marshmallow import fields, Schema, EXCLUDE, pre_load, post_load

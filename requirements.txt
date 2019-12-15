@@ -1,0 +1,6 @@
+marshmallow
+requests
+pyTelegramBotAPI
+flask
+flask_sqlalchemy
+schedule

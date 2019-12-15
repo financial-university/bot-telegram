@@ -1,19 +1,22 @@
-import schedule
-import telebot
+import datetime
 import logging
 import time
-import app.utils.calendar as telebot_calendar
-import app.utils.strings as strings
 
-from app.models import User
-from app.utils.keyboards import *
-from app.utils.server import *
-from config import API_TOKEN
+import schedule
+import telebot
 from telebot.types import ReplyKeyboardRemove
 
-logger = logging.getLogger(__name__)
+import app.utils.calendar as telebot_calendar
+import app.utils.strings as strings
+from app.models import User
+from app.utils.keyboards import choice_day_keyboard, choice_role_keyboard, display_in_schedule_keyboard, main_keyboard, \
+    settings_keyboard, search_keyboard, subscribe_choice_time_keyboard
+from app.utils.server import format_schedule, get_group, get_teacher
+from config import API_TOKEN
+
+
+log = logging.getLogger(__name__)
 telebot.logger.setLevel(logging.DEBUG)
-logger.addHandler(telebot.logger)
 
 bot = telebot.TeleBot(API_TOKEN, threaded=False)
 
@@ -407,10 +410,8 @@ def start_workers():
     :return:
     """
 
-    print(" * CRON started")
+    logging.info(" * CRON started")
     schedule.every().minute.at(":00").do(schedule_subscription)
     while True:
         schedule.run_pending()
         time.sleep(1)
-
-

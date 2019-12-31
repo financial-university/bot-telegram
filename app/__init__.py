@@ -1,14 +1,10 @@
-import logging
 import time
-from threading import Thread
 
 import telebot
 from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
-
+from threading import Thread
 from config import Config, WEBHOOK_LISTEN, WEBHOOK_PORT, WEBHOOK_URL_BASE, WEBHOOK_URL_PATH
-
-logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -20,8 +16,8 @@ from app.models import User
 # db.drop_all()
 db.create_all()
 
-from app import models
-from app.bot import start_workers, bot
+from app import models, bot
+from app.bot import bot, start_schedule, log
 
 
 @app.route('/', methods=['GET', 'HEAD'])
@@ -45,14 +41,19 @@ def users_count():
     return jsonify(count=models.User.len())
 
 
-# bot.remove_webhook()
+def start_app():
 
-time.sleep(1)
+    log.info(" * BOT started")
 
-bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
+    bot.remove_webhook()
 
-workers_flow = Thread(target=start_workers).start()
+    time.sleep(1)
 
-app.run(host=WEBHOOK_LISTEN,
-        port=WEBHOOK_PORT,
-        debug=True)
+    bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
+
+    schedule_flow = Thread(target=start_schedule, args=(bot,))
+    schedule_flow.start()
+
+    app.run(host=WEBHOOK_LISTEN,
+            port=WEBHOOK_PORT,
+            debug=False)

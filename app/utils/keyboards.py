@@ -31,7 +31,7 @@ def main_keyboard(user):
 
     markup.add(KeyboardButton("Поиск"))
 
-    markup.add(KeyboardButton("≡ Настройки"))
+    markup.add(KeyboardButton("Настройки"))
 
     return markup
 
@@ -67,7 +67,16 @@ def settings_keyboard(user):
     markup = ReplyKeyboardMarkup(row_width=2)
 
     markup.add(KeyboardButton("Отображение расписания"))
-    if user.role and user.search_id and (user.subscription_time is None or user.subscription_time == "CHANGES"):
+
+    if user.role and user.search_id:
+        markup.add(KeyboardButton("Добавить в календарь"))
+
+    if (
+        user.role
+        and user.search_id
+        and user.subscription_time is None
+        or user.subscription_time == "CHANGES"
+    ):
         markup.add(KeyboardButton("Подписаться на расписание"))
     else:
         if user.subscription_days is not None and user.subscription_days != "CHANGES":
@@ -90,7 +99,9 @@ def subscribe_choice_time_keyboard():
 
     markup.add(KeyboardButton("7:00"), KeyboardButton("7:30"), KeyboardButton("8:00"))
     markup.add(KeyboardButton("9:00"), KeyboardButton("10:40"), KeyboardButton("12:05"))
-    markup.add(KeyboardButton("20:00"), KeyboardButton("21:30"), KeyboardButton("22:00"))
+    markup.add(
+        KeyboardButton("20:00"), KeyboardButton("21:30"), KeyboardButton("22:00")
+    )
     markup.add(KeyboardButton("Отмена"))
 
     return markup
@@ -121,9 +132,17 @@ def display_in_schedule_keyboard(user):
     """
 
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton(f"Группы в расписании {'✅' if user.show_groups is True else '❌'}",
-                                    callback_data="groups_in_schedule"))
-    markup.add(InlineKeyboardButton(f"Корпус в расписании {'✅' if user.show_location is True else '❌'}",
-                                    callback_data="location_in_schedule"))
+    markup.add(
+        InlineKeyboardButton(
+            f"Группы в расписании {'✅' if user.show_groups is True else '❌'}",
+            callback_data="groups_in_schedule",
+        )
+    )
+    markup.add(
+        InlineKeyboardButton(
+            f"Корпус в расписании {'✅' if user.show_location is True else '❌'}",
+            callback_data="location_in_schedule",
+        )
+    )
 
     return markup

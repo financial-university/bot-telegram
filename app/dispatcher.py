@@ -2,14 +2,20 @@ import logging
 import datetime
 import asyncio
 
-from aiogram.types.reply_keyboard import ReplyKeyboardRemove
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import exceptions
+from aiogram.types.reply_keyboard import ReplyKeyboardRemove
+from aiogram.utils.exceptions import MessageToDeleteNotFound
 
 from app.ruz.server import Group, Teacher, get_group, get_teacher, format_schedule
 from app.dependency import Connection
 from app.model import Model, User
-from app.keyboards import keyboards, inline_keyboards, inline_calendar
+from app.keyboards import (
+    standard_keyboard,
+    inline_keyboard_search,
+    inline_keyboard_settings,
+    inline_keyboard_calendar,
+)
 from app.utils import strings
 
 log = logging.getLogger(__name__)
@@ -30,38 +36,115 @@ class BotDispatcher(Dispatcher):
 
         # CHANGE ROLE
         self.register_message_handler(self.role_message, regexp="студент|преподаватель")
+
+        # SEARCH GROUP/TEACHERS
         self.register_callback_query_handler(
             self._list_groups_or_teachers_handler,
-            inline_keyboards.groups_callback.filter(),
-        )
-        self.register_callback_query_handler(
-            self._list_groups_or_teachers_handler,
-            inline_keyboards.teachers_callback.filter(),
+            inline_keyboard_search.groups_list_callback.filter(),
         )
 
-        # SEARCH
         self.register_callback_query_handler(
-            self._search_handler, inline_keyboards.search_callback.filter(),
+            self._list_groups_or_teachers_handler,
+            inline_keyboard_search.teachers_list_callback.filter(),
+        )
+
+        # SEARCH IN MENU
+
+        self.register_callback_query_handler(
+            self._schedule_specific_day,
+            inline_keyboard_search.menu_callback.filter(
+                menu="Расписание на определенный день"
+            ),
+        )
+
+        self.register_callback_query_handler(
+            self._schedule_specific_teacher,
+            inline_keyboard_search.menu_callback.filter(
+                menu="Расписание преподавателя"
+            ),
+        )
+
+        self.register_callback_query_handler(
+            self._schedule_specific_group,
+            inline_keyboard_search.menu_callback.filter(menu="Расписание группы"),
         )
 
         # CALENDAR
+
         self.register_callback_query_handler(
-            self._calendar_handler, inline_calendar.calendar_callback.filter(),
+            self._calendar_next_month,
+            inline_keyboard_calendar.calendar_callback.filter(action="Следующий месяц"),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_previous_month,
+            inline_keyboard_calendar.calendar_callback.filter(
+                action="Предыдущий месяц"
+            ),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_cancel,
+            inline_keyboard_calendar.calendar_callback.filter(action="Отмена"),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_exception,
+            inline_keyboard_calendar.calendar_callback.filter(action="Исключение"),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_months,
+            inline_keyboard_calendar.calendar_callback.filter(action="Месяца"),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_month,
+            inline_keyboard_calendar.calendar_callback.filter(action="Месяц"),
+        )
+
+        self.register_callback_query_handler(
+            self._calendar_day,
+            inline_keyboard_calendar.calendar_callback.filter(action="День"),
         )
 
         # SETTINGS
+
         self.register_callback_query_handler(
-            self._settings_handler, inline_keyboards.settings_callback.filter(),
+            self._settings_subscribe_to_time,
+            inline_keyboard_settings.settings_callback.filter(menu="Подписка на время"),
+        )
+
+        self.register_callback_query_handler(
+            self._settings_unsubscribe,
+            inline_keyboard_settings.settings_callback.filter(menu="Отписаться"),
+        )
+
+        self.register_callback_query_handler(
+            self._settings_displayed_fields,
+            inline_keyboard_settings.settings_callback.filter(menu="Показываемые поля"),
+        )
+
+        self.register_callback_query_handler(
+            self._settings_back,
+            inline_keyboard_settings.settings_callback.filter(menu="Настройки"),
+        )
+
+        self.register_callback_query_handler(
+            self._settings_displayed_fields_menu,
+            inline_keyboard_settings.settings_callback.filter(
+                menu=["Группы в расписании", "Место в расписании"]
+            ),
         )
 
         # SUBSCRIBE
         self.register_callback_query_handler(
             self._subscribe_to_schedule,
-            inline_keyboards.subscribe_time_callback.filter(),
+            inline_keyboard_settings.subscribe_time_callback.filter(),
         )
         self.register_callback_query_handler(
             self._subscribe_to_schedule,
-            inline_keyboards.subscribe_day_callback.filter(),
+            inline_keyboard_settings.subscribe_day_callback.filter(),
         )
 
         # OTHER MESSAGES
@@ -148,7 +231,8 @@ class BotDispatcher(Dispatcher):
         search_type: str = None,
         show_groups: bool = None,
         show_location: bool = None,
-    ) -> True or False:
+        return_schedule: bool = False,
+    ) -> True or False or str:
         """
         Отсылает пользователю расписание
 
@@ -160,6 +244,7 @@ class BotDispatcher(Dispatcher):
         :param search_type:
         :param show_groups:
         :param show_location:
+        :param return_schedule:
         :return:
         """
 
@@ -185,8 +270,12 @@ class BotDispatcher(Dispatcher):
         )
         if schedule is None:
             log.warning("Target [CHAT_ID:%s]: error getting schedule", user.id)
-            await self.send_message(user.id, text="Не удалось получить расписание")
+            if return_schedule:
+                return strings.CANT_GET_SCHEDULE
+            await self.send_message(user.id, text=strings.CANT_GET_SCHEDULE)
             return False
+        if return_schedule:
+            return schedule
         await self.send_message(user.id, text=schedule)
         return True
 
@@ -222,7 +311,7 @@ class BotDispatcher(Dispatcher):
         await self.send_message(
             user.id,
             text=strings.WELCOME,
-            reply_markup=await keyboards.choice_role_keyboard(),
+            reply_markup=await standard_keyboard.choice_role_keyboard(),
         )
 
     async def role_message(self, message: types.Message) -> None:
@@ -276,10 +365,6 @@ class BotDispatcher(Dispatcher):
             await self._search_teacher(user=user, message=message)
         elif user.menu == "SEARCH_GROUP_DAY" or user.menu == "SEARCH_TEACHER_DAY":
             pass
-        elif user.menu == "SEARCH_DAY" and user.search_additional == "CHANGES":
-            pass
-        elif user.menu == "SEARCH_MENU":
-            pass
         else:
             print("Не относится никуда")
 
@@ -292,21 +377,27 @@ class BotDispatcher(Dispatcher):
         :return:
         """
 
-        if message.text == "Сегодня":
+        select = message.text
+        if select == "Сегодня":
             self.loop.create_task(self.send_schedule(user=user, start_day=0, days=1))
-        elif message.text == "Завтра":
+        elif select == "Завтра":
             self.loop.create_task(self.send_schedule(user=user, start_day=1, days=1))
-        elif message.text == "Эта неделя":
+        elif select == "Эта неделя":
             self.loop.create_task(self.send_schedule(user=user, start_day=-1, days=7))
-        elif message.text == "Следующая неделя":
+        elif select == "Следующая неделя":
             self.loop.create_task(self.send_schedule(user=user, start_day=-2, days=7))
-        elif message.text == "Поиск":
-            keyboard = await inline_keyboards.search_keyboard(user=user)
+        elif select == "Поиск":
+            keyboard = await inline_keyboard_search.search_keyboard(user=user)
             await self.send_message(
                 chat_id=user.id, text=strings.WHAT_TO_FIND, reply_markup=keyboard
             )
-        elif message.text == "Настройки":
-            keyboard = await inline_keyboards.settings(user=user)
+        elif select == "Настройки":
+            keyboard = await inline_keyboard_settings.settings(user=user)
+            await self.send_message(
+                chat_id=user.id, text=strings.WHAT_TO_SET, reply_markup=keyboard,
+            )
+        else:
+            keyboard = await standard_keyboard.main_keyboard()
             await self.send_message(
                 chat_id=user.id, text=strings.WHAT_TO_SET, reply_markup=keyboard,
             )
@@ -335,7 +426,7 @@ class BotDispatcher(Dispatcher):
                     await self.send_message(
                         chat_id=user.id,
                         text=strings.GROUP.format(groups.data[0].name),
-                        reply_markup=await inline_keyboards.choice_day_keyboard(),
+                        reply_markup=await inline_keyboard_settings.choice_day_keyboard(),
                     )
                 else:
                     await self.model.update_user(
@@ -351,10 +442,10 @@ class BotDispatcher(Dispatcher):
                         text=strings.GROUP_CHANGED_FOR.format(groups.data[0].name)
                         + "\n"
                         + strings.CHOOSE_MENU,
-                        reply_markup=await keyboards.main_keyboard(user),
+                        reply_markup=await standard_keyboard.main_keyboard(),
                     )
             else:
-                keyboard = await inline_keyboards.list_groups(groups=groups.data)
+                keyboard = await inline_keyboard_search.list_groups(groups=groups.data)
                 await message.reply(strings.CHOOSE_GROUP, reply_markup=keyboard)
 
         else:
@@ -393,7 +484,7 @@ class BotDispatcher(Dispatcher):
                     await self.send_message(
                         chat_id=user.id,
                         text=strings.GROUP.format(teachers.data[0].name),
-                        reply_markup=await inline_keyboards.choice_day_keyboard(),
+                        reply_markup=await inline_keyboard_settings.choice_day_keyboard(),
                     )
                 else:
                     await self.model.update_user(
@@ -409,10 +500,12 @@ class BotDispatcher(Dispatcher):
                         text=strings.FOUND_TEACHER.format(teachers.data[0].name)
                         + "\n"
                         + strings.CHOOSE_MENU,
-                        reply_markup=await keyboards.main_keyboard(user),
+                        reply_markup=await standard_keyboard.main_keyboard(),
                     )
             else:
-                keyboard = await inline_keyboards.list_teacher(teachers=teachers.data)
+                keyboard = await inline_keyboard_search.list_teacher(
+                    teachers=teachers.data
+                )
                 await message.reply(
                     strings.CHOOSE_CURRENT_TEACHER, reply_markup=keyboard
                 )
@@ -457,7 +550,7 @@ class BotDispatcher(Dispatcher):
             await self.send_message(
                 chat_id=user.id,
                 text=text,
-                reply_markup=await inline_keyboards.choice_day_keyboard(),
+                reply_markup=await inline_keyboard_settings.choice_day_keyboard(),
             )
         else:
             await self.model.update_user(
@@ -470,10 +563,65 @@ class BotDispatcher(Dispatcher):
             await self.send_message(
                 chat_id=user.id,
                 text=strings.CHOOSE_MENU,
-                reply_markup=await keyboards.main_keyboard(user),
+                reply_markup=await standard_keyboard.main_keyboard(),
             )
 
-    async def _settings_handler(
+    @staticmethod
+    async def _settings_subscribe_to_time(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает подписку. Выбор времени
+
+        :param query:
+        :return:
+        """
+
+        keyboard = await inline_keyboard_settings.subscribe_choice_time_keyboard()
+        await query.message.edit_text(
+            strings.SUBSCRIBE_CHOICE_TIME, reply_markup=keyboard
+        )
+
+    async def _settings_unsubscribe(self, query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает отписку
+
+        :param query:
+        :return:
+        """
+
+        user = await self.model.get_user(query.from_user.id)
+
+        await self._unsubscribe_to_schedule(user)
+        await query.message.edit_text(strings.UNSUBSCRIBE_SCHEDULE)
+
+    async def _settings_displayed_fields(self, query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает позываемые поля
+
+        :param query:
+        :return:
+        """
+
+        user = await self.model.get_user(query.from_user.id)
+
+        keyboard = await inline_keyboard_settings.display_in_schedule(
+            show_groups=user.show_groups, show_location=user.show_location
+        )
+        await query.message.edit_text(strings.DISPLAY_SCHEDULE, reply_markup=keyboard)
+
+    async def _settings_back(self, query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает кнопку назад
+
+        :param query:
+        :return:
+        """
+
+        user = await self.model.get_user(query.from_user.id)
+
+        keyboard = await inline_keyboard_settings.settings(user=user)
+        await query.message.edit_text(strings.WHAT_TO_SET, reply_markup=keyboard)
+
+    async def _settings_displayed_fields_menu(
         self, query: types.CallbackQuery, callback_data: dict
     ) -> None:
         """
@@ -485,51 +633,26 @@ class BotDispatcher(Dispatcher):
         """
 
         user = await self.model.get_user(query.from_user.id)
-
-        if callback_data["menu"] == "SUBSCRIBE_CHOICE_TIME":
-
-            keyboard = await inline_keyboards.subscribe_choice_time_keyboard()
-            await query.message.edit_text(
-                strings.SUBSCRIBE_CHOICE_TIME, reply_markup=keyboard
-            )
-
-        elif callback_data["menu"] == "SUBSCRIBE_CHOICE_DAY":
-            pass  # TODO Дописать
-        elif callback_data["menu"] == "UNSUBSCRIBE":
-            await self._unsubscribe_to_schedule(user)
-            await query.message.edit_text(strings.UNSUBSCRIBE_SCHEDULE)
-        elif callback_data["menu"] == "DISPLAY_SCHEDULE":
-            keyboard = await inline_keyboards.display_in_schedule(
-                show_groups=user.show_groups, show_location=user.show_location
-            )
-            await query.message.edit_text(
-                strings.DISPLAY_SCHEDULE, reply_markup=keyboard
-            )
-        elif (
-            callback_data["menu"] == "LOCATION_IN_SCHEDULE"
-            or callback_data["menu"] == "GROUPS_IN_SCHEDULE"
-        ):
+        menu = callback_data["menu"]
+        if any(item == menu for item in ("Место в расписании", "Группы в расписании")):
             show_groups = user.show_groups
             show_location = user.show_location
-            if callback_data["menu"] == "LOCATION_IN_SCHEDULE":
+            if menu == "Место в расписании":
                 show_location = False if show_location is True else True
                 await self.model.update_user(
                     user.id, data=dict(show_location=show_location)
                 )
-            elif callback_data["menu"] == "GROUPS_IN_SCHEDULE":
+            elif menu == "Группы в расписании":
                 show_groups = False if show_groups is True else True
                 await self.model.update_user(
                     user.id, data=dict(show_groups=show_groups)
                 )
-            keyboard = await inline_keyboards.display_in_schedule(
+            keyboard = await inline_keyboard_settings.display_in_schedule(
                 show_groups=show_groups, show_location=show_location
             )
             await query.message.edit_text(
                 strings.DISPLAY_SCHEDULE, reply_markup=keyboard
             )
-        elif callback_data["menu"] == "CANCEL":
-            keyboard = await inline_keyboards.settings(user=user)
-            await query.message.edit_text(strings.WHAT_TO_SET, reply_markup=keyboard)
 
     async def _subscribe_to_schedule(
         self, query: types.CallbackQuery, callback_data: dict
@@ -543,7 +666,7 @@ class BotDispatcher(Dispatcher):
         """
 
         user = await self.model.get_user(query.from_user.id)
-        if callback_data["@"] == "s_t":
+        if callback_data["@"] == "sub_t":
             time = callback_data["time"]
             if time == "Отмена":
                 await self.loop.create_task(self._unsubscribe_to_schedule(user))
@@ -553,11 +676,11 @@ class BotDispatcher(Dispatcher):
                     user.id,
                     data=dict(subscription_id=user.search_id, subscription_time=time,),
                 )
-                keyboard = await inline_keyboards.choice_day_keyboard()
+                keyboard = await inline_keyboard_settings.choice_day_keyboard()
                 await query.message.edit_text(
                     strings.WHAT_TO_SET, reply_markup=keyboard
                 )
-        elif callback_data["@"] == "s_d":
+        elif callback_data["@"] == "sub_d":
             day = callback_data["day"]
             if day == "Отмена":
                 self.loop.create_task(self._unsubscribe_to_schedule(user))
@@ -595,20 +718,43 @@ class BotDispatcher(Dispatcher):
             ),
         )
 
-    async def _calendar_handler(
+    async def _calendar_day(
         self, query: types.CallbackQuery, callback_data: dict
     ) -> None:
         """
-        Обрабатывает действия с календарем
+        Обрабатывает действие календаря "расписание на определенный календаря"
 
         :param query:
         :param callback_data:
         :return:
         """
 
-        print(callback_data)
-        print(query)
         user = await self.model.get_user(query.from_user.id)
+        self.loop.create_task(query.answer(strings.LOAD_SCHEDULE))
+        action, day, month, year = (
+            callback_data["action"],
+            callback_data["day"],
+            callback_data["month"],
+            callback_data["year"],
+        )
+        date = datetime.datetime.strptime(f"{day}.{month}.{year}", f"%d.%m.%Y")
+        start_day = (date - datetime.datetime.today() + datetime.timedelta(days=1)).days
+        message = await self.send_schedule(
+            user=user, start_day=start_day, days=1, return_schedule=True
+        )
+        await query.message.edit_text(message)
+
+    @staticmethod
+    async def _calendar_next_month(
+        query: types.CallbackQuery, callback_data: dict
+    ) -> None:
+        """
+        Обрабатывает действие календаря "следующий месяц календаря"
+
+        :param query:
+        :param callback_data:
+        :return:
+        """
 
         action, day, month, year = (
             callback_data["action"],
@@ -619,71 +765,145 @@ class BotDispatcher(Dispatcher):
 
         current = datetime.datetime(int(year), int(month), 1)
 
-        if action == "NEXT-MONTH":
-            next_month = current + datetime.timedelta(days=31)
-            keyboard = await inline_calendar.create_calendar(
-                int(next_month.year), int(next_month.month)
-            )
-            await query.message.edit_text(
-                text=query.message.text, reply_markup=keyboard
-            )
-        elif action == "PREVIOUS-MONTH":
-            preview_month = current - datetime.timedelta(days=1)
-            keyboard = await inline_calendar.create_calendar(
-                year=int(preview_month.year), month=int(preview_month.month)
-            )
-            await query.message.edit_text(
-                text=query.message.text, reply_markup=keyboard
-            )
-        elif action == "CANCEL":
-            await query.message.delete()
-        elif action == "MONTH":
-            keyboard = await inline_calendar.create_calendar(
-                year=int(year), month=int(month)
-            )
-            await query.message.edit_text(
-                text=query.message.text, reply_markup=keyboard
-            )
-        elif action == "MONTHS":
-            keyboard = await inline_calendar.create_months_calendar(year=current.year)
-            await query.message.edit_text(
-                text=query.message.text, reply_markup=keyboard
-            )
-        elif action == "DAY":
-            date = datetime.datetime.strptime(f"{day}.{month}.{year}", f"%d.%m.%Y")
-            start_day = (
-                date - datetime.datetime.today() + datetime.timedelta(days=1)
-            ).days
-            # TODO Сделать фикс
-            await query.message.delete()
-            self.loop.create_task(
-                self.send_schedule(user=user, start_day=start_day, days=1)
-            )
+        next_month = current + datetime.timedelta(days=31)
+        keyboard = await inline_keyboard_calendar.create_calendar(
+            int(next_month.year), int(next_month.month)
+        )
+        await query.message.edit_text(text=query.message.text, reply_markup=keyboard)
 
-    async def _search_handler(
-        self, query: types.CallbackQuery, callback_data: dict
+    @staticmethod
+    async def _calendar_previous_month(
+        query: types.CallbackQuery, callback_data: dict
     ) -> None:
         """
-        Обрабатывает поиск
+        Обрабатывает действие календаря "предыдущий месяц календаря"
 
         :param query:
         :param callback_data:
         :return:
         """
 
-        print(callback_data)
-        print(query)
+        action, day, month, year = (
+            callback_data["action"],
+            callback_data["day"],
+            callback_data["month"],
+            callback_data["year"],
+        )
 
-        menu = callback_data["menu"]
-        if menu == "Расписание на определенный день":
-            now = datetime.datetime.now()
-            await query.message.edit_text(
-                strings.SELECT_DAY_IN_CALENDAR,
-                reply_markup=await inline_calendar.create_calendar(
-                    year=now.year, month=now.month
-                ),
-            )
-        elif menu == "Расписание преподавателя":
-            pass
-        elif menu == "Расписание группы":
-            pass
+        current = datetime.datetime(int(year), int(month), 1)
+
+        preview_month = current - datetime.timedelta(days=1)
+        keyboard = await inline_keyboard_calendar.create_calendar(
+            year=int(preview_month.year), month=int(preview_month.month)
+        )
+        await query.message.edit_text(text=query.message.text, reply_markup=keyboard)
+
+    @staticmethod
+    async def _calendar_month(query: types.CallbackQuery, callback_data: dict) -> None:
+        """
+        Обрабатывает действие календаря "выбор месяца"
+
+        :param query:
+        :param callback_data:
+        :return:
+        """
+
+        action, day, month, year = (
+            callback_data["action"],
+            callback_data["day"],
+            callback_data["month"],
+            callback_data["year"],
+        )
+
+        keyboard = await inline_keyboard_calendar.create_calendar(
+            year=int(year), month=int(month)
+        )
+        await query.message.edit_text(text=query.message.text, reply_markup=keyboard)
+
+    @staticmethod
+    async def _calendar_months(query: types.CallbackQuery, callback_data: dict) -> None:
+        """
+        Обрабатывает действие календаря "показать месяца"
+
+        :param query:
+        :param callback_data:
+        :return:
+        """
+
+        action, day, month, year = (
+            callback_data["action"],
+            callback_data["day"],
+            callback_data["month"],
+            callback_data["year"],
+        )
+
+        current = datetime.datetime(int(year), int(month), 1)
+
+        keyboard = await inline_keyboard_calendar.create_months_calendar(
+            year=current.year
+        )
+        await query.message.edit_text(text=query.message.text, reply_markup=keyboard)
+
+    @staticmethod
+    async def _calendar_exception(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает действие календаря "исключение"
+
+        :param query:
+        :return:
+        """
+
+        await query.answer("Выберите другое действие")
+
+    @staticmethod
+    async def _calendar_cancel(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает действие календаря "отмена"
+
+        :param query:
+        :return:
+        """
+
+        try:
+            await query.message.delete()
+        except MessageToDeleteNotFound:
+            await query.answer(strings.MESSAGE_DELETED)
+
+    @staticmethod
+    async def _schedule_specific_day(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает расписание на определенный день
+
+        :param query:
+        :return:
+        """
+
+        now = datetime.datetime.now()
+        await query.message.edit_text(
+            strings.SELECT_DAY_IN_CALENDAR,
+            reply_markup=await inline_keyboard_calendar.create_calendar(
+                year=now.year, month=now.month
+            ),
+        )
+
+    @staticmethod
+    async def _schedule_specific_group(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает расписание для опеределнной группы
+
+        :param query:
+        :return:
+        """
+
+        pass
+
+    @staticmethod
+    async def _schedule_specific_teacher(query: types.CallbackQuery) -> None:
+        """
+        Обрабатывает расписание для определенного преподавателя
+
+        :param query:
+        :return:
+        """
+
+        pass

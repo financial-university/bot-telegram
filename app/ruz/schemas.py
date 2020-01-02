@@ -25,14 +25,14 @@ class DateField(fields.Field):
 
 class Pair(Schema):
     @pre_load()
-    def preload(self, data, many, **kwargs):
+    def pre_load(self, data, many, **kwargs):
         data["groups"] = set(
-            (data["group"] or data["stream"]).replace(" ", "").split(",")
+            (data["group"] or data["stream"] or "").replace(" ", "").split(",")
         )
         return data
 
     @post_load()
-    def postload(self, data, **kwargs):
+    def post_load(self, data, **kwargs):
         return {data["time_start"]: data}
 
     time_start = fields.String(data_key="beginLesson")
@@ -56,7 +56,7 @@ class ScheduleSchema(Schema):
     pairs = fields.List(fields.Nested(Pair()))
 
     @post_load()
-    def postload(self, data, **kwargs):
+    def post_load(self, data, **kwargs):
         res = dict()
         for pairs in data["pairs"]:
             for time_start, pair in pairs.items():

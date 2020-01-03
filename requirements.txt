@@ -1,3 +1,5 @@
+certifi
+aiocache
 aiohttp
 aiohttp_socks
 aiogram

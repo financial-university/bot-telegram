@@ -18,7 +18,7 @@ async def choice_role_keyboard() -> ReplyKeyboardMarkup:
 
 async def main_keyboard() -> ReplyKeyboardMarkup:
     """
-    Возвращает главную клавиатуру
+    Возвращает клавиатуру главного меню
 
     :return:
     """

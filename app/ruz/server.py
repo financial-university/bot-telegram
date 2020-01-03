@@ -7,11 +7,12 @@ from urllib.parse import quote
 from typing import NamedTuple, Any
 
 import ujson
-from marshmallow import ValidationError
+from aiocache import cached
+from aiocache.serializers import PickleSerializer
 from aiohttp import ClientSession, ClientError
+from marshmallow import ValidationError
 
 from app.ruz.schemas import ScheduleSchema
-
 
 SCHEDULE_SCHEMA = ScheduleSchema()
 
@@ -67,9 +68,8 @@ def date_name(date: datetime) -> str:
     ][date.weekday()]
 
 
-# @timed_cache(minutes=180)
-# @functools.lru_cache()
-# @cacheable
+# 1 час
+@cached(ttl=3600, serializer=PickleSerializer())
 async def get_group(group_name: str) -> Data:
     """
     Запрашивает группу у сервера
@@ -78,28 +78,28 @@ async def get_group(group_name: str) -> Data:
     :return: id группы в Data
     """
 
-    print("запрос")
     try:
-        async with ClientSession(json_serialize=ujson.dumps) as client:
+        async with ClientSession() as client:
             request = await client.get(
                 f"https://ruz.fa.ru/api/search?term={quote(group_name)}&type=group",
                 timeout=2,
                 ssl=ssl_context,
             )
-            found_groups = await request.json()
+            response_json = await request.json(loads=ujson.loads)
     except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
         return Data.error("Timeout error")
-    if found_groups:
+    if response_json:
         return Data(
             [
                 Group(id=group["id"], name=group["label"].strip().upper())
-                for group in found_groups
+                for group in response_json
             ]
         )
     return Data.error("Not found")
 
 
-# @timed_cache(minutes=180)
+# 1 час
+@cached(ttl=3600, serializer=PickleSerializer())
 async def get_teacher(teacher_name: str) -> Data:
     """
     Поиск преподователя
@@ -109,23 +109,22 @@ async def get_teacher(teacher_name: str) -> Data:
     """
 
     try:
-        async with ClientSession(json_serialize=ujson.dumps) as client:
-            request = await client.get(
+        async with ClientSession() as client:
+            response = await client.get(
                 f"https://ruz.fa.ru/api/search?term={quote(teacher_name)}&type=lecturer",
                 timeout=2,
                 ssl=ssl_context,
             )
-            request_json = await request.json()
+            response_json = await response.json(loads=ujson.loads)
     except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
         return Data.error("Timeout error")
-    if request_json:
+    if response_json:
         return Data(
-            [Teacher(id=i["id"], name=i["label"]) for i in request_json if i["id"]]
+            [Teacher(id=i["id"], name=i["label"]) for i in response_json if i["id"]]
         )
     return Data.error("Not found")
 
 
-# @timed_cache(minutes=2)
 async def get_schedule(
     id: int, date_start: datetime = None, date_end: datetime = None, type: str = "group"
 ) -> Data:
@@ -149,19 +148,21 @@ async def get_schedule(
         f"&finish={date_end.strftime('%Y.%m.%d')}&lng=1"
     )
     try:
-        async with ClientSession(json_serialize=ujson.dumps) as client:
-            request = await client.get(url, ssl=ssl_context)
-            request_json = await request.json()
+        async with ClientSession() as client:
+            response = await client.get(url, ssl=ssl_context)
+            response_json = await response.json(loads=ujson.loads)
     except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
         return Data.error("Timeout error")
     try:
-        res = SCHEDULE_SCHEMA.load({"pairs": request_json})
+        res = SCHEDULE_SCHEMA.load({"pairs": response_json})
         return Data(res)
     except ValidationError as e:
         log.warning("Validation error in get_schedule for %s %s - %r", type, id, e)
         return Data.error("validation error")
 
 
+# 2 минуты
+@cached(ttl=120, serializer=PickleSerializer())
 async def format_schedule(
     id: int,
     type: str,
@@ -169,21 +170,21 @@ async def format_schedule(
     days: int = 1,
     show_groups: bool = False,
     show_location: bool = False,
-    text: str = "",
 ) -> str or None:
     """
     Форматирует расписание к виду который отправляет бот
 
-    :param show_location:
-    :param show_groups:
+
     :param id:
     :param type:
-    :param text: начальная строка, к которой прибавляется расписание
     :param start_day: начальная дата в количестве дней от сейчас
     :param days: количество дней
+    :param show_location:
+    :param show_groups:
     :return: строку расписания
     """
 
+    text = str()
     date_start = datetime.datetime.now() + datetime.timedelta(days=start_day)
     date_end = date_start + datetime.timedelta(days=days)
     schedule = await get_schedule(
@@ -206,7 +207,7 @@ async def format_schedule(
                 else:
                     text += f"\n⏱{lesson['time_start']} – {lesson['time_end']}⏱\n"
                     selected_days.add(lesson["time_start"])
-                text += f"{lesson['name']}\n"
+                text += f"*{lesson['name']}*\n"
                 if lesson["type"]:
                     text += f"{lesson['type']}\n"
                 if show_groups and lesson["groups"]:
@@ -216,7 +217,7 @@ async def format_schedule(
                 if lesson["audience"]:
                     text += f"Где: {lesson['audience']}"
                 if show_location and lesson["location"] is not None:
-                    text += f", {lesson['location']}\n"
+                    text += f", _{lesson['location']}_\n"
                 else:
                     text += "\n"
                 text += f"Кто: {lesson['teachers_name']}\n"

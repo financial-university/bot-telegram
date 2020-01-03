@@ -1,4 +1,5 @@
 import logging
+from typing import NamedTuple
 
 import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
@@ -10,6 +11,15 @@ metadata = MetaData()
 db = declarative_base(metadata=metadata)
 
 log = logging.getLogger(__name__)
+
+
+class UserFilteredByTime(NamedTuple):
+    id: int
+    role: str
+    subscription_days: str
+    subscription_id: str
+    show_location: bool
+    show_groups: bool
 
 
 class User(db):
@@ -41,15 +51,11 @@ class User(db):
         return sa.select(
             [
                 cls.id,
-                cls.login,
                 cls.role,
-                cls.menu,
-                cls.search_id,
-                cls.search_display,
-                cls.search_additional,
+                cls.subscription_days,
+                cls.subscription_id,
                 cls.show_location,
                 cls.show_groups,
-                cls.subscription_days,
             ]
         ).where(cls.subscription_time == time)
 
@@ -88,6 +94,17 @@ class User(db):
         sql = cls.__table__.update().values(data).where(cls.id == id)
         return sql
 
+    @classmethod
+    def count_users(cls):
+        """
+        Количество записей в таблицей Users
+
+        :return:
+        """
+
+        sql = sa.select([sa.func.count()]).select_from(cls.__table__)
+        return sql
+
 
 class Model:
     db: Connection
@@ -121,3 +138,13 @@ class Model:
 
         async with self.db() as connection:
             await connection.execute(User.update_user(id, data=data))
+
+    async def get_count_users(self) -> int:
+        """
+        Считает кол-во пользователей в базе
+
+        :return:
+        """
+
+        async with self.db() as connection:
+            return (await (await connection.execute(User.count_users())).fetchone())[0]

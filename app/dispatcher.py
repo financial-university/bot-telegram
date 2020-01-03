@@ -3,13 +3,15 @@ import datetime
 import asyncio
 
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import ParseMode
 from aiogram.utils import exceptions
 from aiogram.types.reply_keyboard import ReplyKeyboardRemove
 from aiogram.utils.exceptions import MessageToDeleteNotFound
+from aiogram.utils.parts import safe_split_text
 
 from app.ruz.server import Group, Teacher, get_group, get_teacher, format_schedule
 from app.dependency import Connection
-from app.model import Model, User
+from app.model import Model, User, UserFilteredByTime
 from app.keyboards import (
     standard_keyboard,
     inline_keyboard_search,
@@ -21,7 +23,121 @@ from app.utils import strings
 log = logging.getLogger(__name__)
 
 
-class BotDispatcher(Dispatcher):
+class BotScheduleHelper:
+    bot: Bot
+
+    async def get_schedule(
+        self,
+        user: User or UserFilteredByTime,
+        start_day: int = 0,
+        days: int = 1,
+        text: str = "",
+        search_id: int = None,
+        search_type: str = None,
+        show_groups: bool = None,
+        show_location: bool = None,
+    ) -> list:
+        """
+        Отсылает пользователю расписание
+
+        :param user:
+        :param start_day: -1 - начало этой недели, -2 - начало следующей
+        :param days:
+        :param text: начальная строка, к которой прибавляется расписание
+        :param search_id:
+        :param search_type:
+        :param show_groups:
+        :param show_location:
+        :return:
+        """
+
+        if start_day == -1:
+            start_day = -datetime.datetime.now().isoweekday() + 1
+        elif start_day == -2:
+            start_day = 7 - datetime.datetime.now().isoweekday() + 1
+
+        if search_type is None or search_id is None:
+            search_id = user.search_id
+            search_type = user.role
+            show_groups = user.show_groups
+            show_location = user.show_location
+
+        schedule = await format_schedule(
+            id=search_id,
+            type=search_type,
+            start_day=start_day,
+            days=days,
+            show_groups=show_groups,
+            show_location=show_location,
+        )
+        if schedule is None:
+            log.warning("Target [CHAT_ID:%s]: error getting schedule", user.id)
+            return safe_split_text(text + strings.CANT_GET_SCHEDULE)
+        return safe_split_text(text + schedule)
+
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str or list,
+        parse_mode: str = None,
+        disable_web_page_preview: bool = None,
+        disable_notification: bool = None,
+        reply_to_message_id: int = None,
+        reply_markup=None,
+    ) -> True or False:
+        """
+        Отправка сообщенея
+
+        :param chat_id:
+        :param text:
+        :param parse_mode:
+        :param disable_web_page_preview:
+        :param disable_notification:
+        :param reply_to_message_id:
+        :param reply_markup:
+        :return:
+        """
+
+        if isinstance(text, str):
+            parts = safe_split_text(text)
+        elif isinstance(text, list):
+            parts = text
+        else:
+            raise TypeError
+
+        try:
+            for text in parts:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=parse_mode,
+                    disable_web_page_preview=disable_web_page_preview,
+                    disable_notification=disable_notification,
+                    reply_to_message_id=reply_to_message_id,
+                    reply_markup=reply_markup,
+                )
+        except exceptions.BotBlocked:
+            log.error("Target [CHAT_ID:%s]: blocked by user", chat_id)
+        except exceptions.ChatNotFound:
+            log.error("Target [CHAT_ID:%s]: invalid user ID", chat_id)
+        except exceptions.RetryAfter as e:
+            log.error(
+                "Target [CHAT_ID:%s]: Flood limit is exceeded. Sleep %s seconds.",
+                chat_id,
+                e.timeout,
+            )
+            await asyncio.sleep(e.timeout)
+        except exceptions.UserDeactivated:
+            log.error("Target [CHAT_ID:%s]: user is deactivated", chat_id)
+        except exceptions.TelegramAPIError:
+            log.exception(f"Target [CHAT_ID:%s]: failed", chat_id)
+        else:
+            log.info("Target [CHAT_ID:%s]: success", chat_id)
+            return True
+        return False
+
+
+class BotDispatcher(Dispatcher, BotScheduleHelper):
     bot: Bot
     model: Model
 
@@ -150,135 +266,6 @@ class BotDispatcher(Dispatcher):
         # OTHER MESSAGES
         self.register_message_handler(self.check_other_messages, content_types=["text"])
 
-    async def send_message(
-        self,
-        chat_id: int,
-        text: str,
-        parse_mode: str = None,
-        disable_web_page_preview: bool = None,
-        disable_notification: bool = None,
-        reply_to_message_id: int = None,
-        reply_markup=None,
-    ) -> True or False:
-        """
-        Отправка сообщенея
-
-        :param chat_id:
-        :param text:
-        :param parse_mode:
-        :param disable_web_page_preview:
-        :param disable_notification:
-        :param reply_to_message_id:
-        :param reply_markup:
-        :return:
-        """
-
-        if len(text) > 4096:
-            parts = list()
-            while len(text) > 0:
-                if len(text) > 4096:
-                    part = text[:4096]
-                    r = part.rfind("\n")
-                    if r != -1:
-                        parts.append(part[:r])
-                        text = text[(r + 1) :]
-                    else:
-                        parts.append(part)
-                        text = text[4096:]
-                else:
-                    parts.append(text)
-                    break
-        else:
-            parts = [text]
-        try:
-            for text in parts:
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    parse_mode=parse_mode,
-                    disable_web_page_preview=disable_web_page_preview,
-                    disable_notification=disable_notification,
-                    reply_to_message_id=reply_to_message_id,
-                    reply_markup=reply_markup,
-                )
-        except exceptions.BotBlocked:
-            log.error("Target [CHAT_ID:%s]: blocked by user", chat_id)
-        except exceptions.ChatNotFound:
-            log.error("Target [CHAT_ID:%s]: invalid user ID", chat_id)
-        except exceptions.RetryAfter as e:
-            log.error(
-                "Target [CHAT_ID:%s]: Flood limit is exceeded. Sleep %s seconds.",
-                chat_id,
-                e.timeout,
-            )
-            await asyncio.sleep(e.timeout)
-        except exceptions.UserDeactivated:
-            log.error("Target [CHAT_ID:%s]: user is deactivated", chat_id)
-        except exceptions.TelegramAPIError:
-            log.exception(f"Target [CHAT_ID:%s]: failed", chat_id)
-        else:
-            log.info("Target [CHAT_ID:%s]: success", chat_id)
-            return True
-        return False
-
-    async def send_schedule(
-        self,
-        user: User,
-        start_day: int = 0,
-        days: int = 1,
-        text: str = "",
-        search_id: int = None,
-        search_type: str = None,
-        show_groups: bool = None,
-        show_location: bool = None,
-        return_schedule: bool = False,
-    ) -> True or False or str:
-        """
-        Отсылает пользователю расписание
-
-        :param user:
-        :param start_day: -1 - начало этой недели, -2 - начало следующей
-        :param days:
-        :param text:
-        :param search_id:
-        :param search_type:
-        :param show_groups:
-        :param show_location:
-        :param return_schedule:
-        :return:
-        """
-
-        if start_day == -1:
-            start_day = -datetime.datetime.now().isoweekday() + 1
-        elif start_day == -2:
-            start_day = 7 - datetime.datetime.now().isoweekday() + 1
-
-        if search_type is None or search_id is None:
-            search_id = user.search_id
-            search_type = user.role
-            show_groups = user.show_groups
-            show_location = user.show_location
-
-        schedule = await format_schedule(
-            id=search_id,
-            type=search_type,
-            start_day=start_day,
-            days=days,
-            text=text,
-            show_groups=show_groups,
-            show_location=show_location,
-        )
-        if schedule is None:
-            log.warning("Target [CHAT_ID:%s]: error getting schedule", user.id)
-            if return_schedule:
-                return strings.CANT_GET_SCHEDULE
-            await self.send_message(user.id, text=strings.CANT_GET_SCHEDULE)
-            return False
-        if return_schedule:
-            return schedule
-        await self.send_message(user.id, text=schedule)
-        return True
-
     async def start_message(self, message: types.Message) -> None:
         """
         Отправляет начальные настройки пользователя и сбрасывает данные пользователя по умолчанию
@@ -323,6 +310,7 @@ class BotDispatcher(Dispatcher):
         """
 
         user = await self.model.get_user(message.from_user.id)
+
         if message.text == "Студент":
             await self.model.update_user(
                 user.id, data=dict(id=user.id, role="student", menu="CHOICE_GROUP"),
@@ -379,13 +367,37 @@ class BotDispatcher(Dispatcher):
 
         select = message.text
         if select == "Сегодня":
-            self.loop.create_task(self.send_schedule(user=user, start_day=0, days=1))
+            self.loop.create_task(
+                self.send_message(
+                    chat_id=user.id,
+                    text=await self.get_schedule(user=user, start_day=0, days=1),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            )
         elif select == "Завтра":
-            self.loop.create_task(self.send_schedule(user=user, start_day=1, days=1))
+            self.loop.create_task(
+                self.send_message(
+                    chat_id=user.id,
+                    text=await self.get_schedule(user=user, start_day=1, days=1),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            )
         elif select == "Эта неделя":
-            self.loop.create_task(self.send_schedule(user=user, start_day=-1, days=7))
+            self.loop.create_task(
+                self.send_message(
+                    user.id,
+                    text=await self.get_schedule(user=user, start_day=-1, days=7),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            )
         elif select == "Следующая неделя":
-            self.loop.create_task(self.send_schedule(user=user, start_day=-2, days=7))
+            self.loop.create_task(
+                self.send_message(
+                    user.id,
+                    text=await self.get_schedule(user=user, start_day=-2, days=7),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            )
         elif select == "Поиск":
             keyboard = await inline_keyboard_search.search_keyboard(user=user)
             await self.send_message(
@@ -722,7 +734,7 @@ class BotDispatcher(Dispatcher):
         self, query: types.CallbackQuery, callback_data: dict
     ) -> None:
         """
-        Обрабатывает действие календаря "расписание на определенный календаря"
+        Обрабатывает действие календаря "расписание на определенный день"
 
         :param query:
         :param callback_data:
@@ -739,10 +751,9 @@ class BotDispatcher(Dispatcher):
         )
         date = datetime.datetime.strptime(f"{day}.{month}.{year}", f"%d.%m.%Y")
         start_day = (date - datetime.datetime.today() + datetime.timedelta(days=1)).days
-        message = await self.send_schedule(
-            user=user, start_day=start_day, days=1, return_schedule=True
-        )
-        await query.message.edit_text(message)
+
+        message = await self.get_schedule(user=user, start_day=start_day, days=1)
+        await query.message.edit_text(message[0], parse_mode=ParseMode.MARKDOWN)
 
     @staticmethod
     async def _calendar_next_month(

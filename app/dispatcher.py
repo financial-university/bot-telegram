@@ -23,11 +23,11 @@ from app.utils import strings
 log = logging.getLogger(__name__)
 
 
-class BotScheduleHelper:
+class BotHelper:
     bot: Bot
 
+    @staticmethod
     async def get_schedule(
-        self,
         user: User or UserFilteredByTime,
         start_day: int = 0,
         days: int = 1,
@@ -72,7 +72,7 @@ class BotScheduleHelper:
         )
         if schedule is None:
             log.warning("Target [CHAT_ID:%s]: error getting schedule", user.id)
-            return safe_split_text(text + strings.CANT_GET_SCHEDULE)
+            return [strings.CANT_GET_SCHEDULE]
         return safe_split_text(text + schedule)
 
     async def send_message(
@@ -137,7 +137,7 @@ class BotScheduleHelper:
         return False
 
 
-class BotDispatcher(Dispatcher, BotScheduleHelper):
+class BotDispatcher(Dispatcher, BotHelper):
     bot: Bot
     model: Model
 
@@ -255,11 +255,11 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
 
         # SUBSCRIBE
         self.register_callback_query_handler(
-            self._subscribe_to_schedule,
+            self._choice_day_schedule,
             inline_keyboard_settings.subscribe_time_callback.filter(),
         )
         self.register_callback_query_handler(
-            self._subscribe_to_schedule,
+            self._choice_day_schedule,
             inline_keyboard_settings.subscribe_day_callback.filter(),
         )
 
@@ -291,10 +291,6 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
                 login=message.from_user.username,
             ),
         )
-        # TODO Решить что с этим делать
-        # self.users.update(
-        #     {user.id: dict(time=datetime.datetime.today(), warnings=0, ban=False)}
-        # )
         await self.send_message(
             user.id,
             text=strings.WELCOME,
@@ -351,10 +347,26 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
             await self._search_group(user=user, message=message)
         elif user.menu == "CHOICE_NAME" or user.menu == "SEARCH_TEACHER":
             await self._search_teacher(user=user, message=message)
-        elif user.menu == "SEARCH_GROUP_DAY" or user.menu == "SEARCH_TEACHER_DAY":
-            pass
+        elif user.menu == "SUBSCRIBE_CHOICE_TIME":
+            data = dict(menu="MAIN_MENU", subscription_id=user.search_id,)
+            try:
+                subscribe_time = datetime.datetime.strptime(
+                    message.text, "%H:%M"
+                ).strftime("%H:%M")
+                data["subscription_time"] = subscribe_time
+                await self.model.update_user(user.id, data=data)
+                keyboard = await inline_keyboard_settings.choice_day_keyboard()
+                await self.send_message(
+                    chat_id=user.id,
+                    text=strings.DISPLAY_SCHEDULE,
+                    reply_markup=keyboard,
+                )
+            except ValueError:
+                await self.send_message(
+                    chat_id=user.id, text="Выберите другое время",
+                )
         else:
-            print("Не относится никуда")
+            log.warning("Target [CHAT_ID:%s]: not found menu", user.id)
 
     async def _main_menu(self, user: User, message: types.Message) -> None:
         """
@@ -428,11 +440,12 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
 
         if isinstance(groups.data, list) and groups.has_error is False and groups.data:
             if len(groups.data) == 1:
-                if user.menu == "SEARCH_GROUP":  # TODO проверить работу
+                if user.menu == "SEARCH_GROUP":
                     await self.model.update_user(
                         id=user.id,
                         data=dict(
-                            search_additional=groups.data[0].id, menu="SEARCH_GROUP_DAY"
+                            search_additional=groups.data[0].id,
+                            menu="SEARCH_GROUP_DAY",
                         ),
                     )
                     await self.send_message(
@@ -485,7 +498,7 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
             and teachers.data
         ):
             if len(teachers.data) == 1:
-                if user.menu == "SEARCH_TEACHER":  # TODO проверить работу
+                if user.menu == "SEARCH_TEACHER":
                     await self.model.update_user(
                         id=user.id,
                         data=dict(
@@ -543,25 +556,20 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
         if callback_data["@"] == "g":
             data = Group(id=callback_data["id"], name=callback_data["name"])
             search_day = "SEARCH_GROUP_DAY"
-            text = strings.GROUP.format(data.name)
             edit_text = strings.GROUP_CHANGED_FOR.format(data.name)
         elif callback_data["@"] == "t":
             data = Teacher(id=callback_data["id"], name=callback_data["name"])
             search_day = "SEARCH_TEACHER_DAY"
-            text = strings.FOUND_TEACHER.format(data.name)
             edit_text = strings.TEACHER_CHANGED_FOR.format(data.name)
         else:
             raise TypeError
 
-        if (
-            user.menu == "SEARCH_GROUP" or user.menu == "SEARCH_TEACHER"
-        ):  # TODO Проверить работу
+        if user.menu == "SEARCH_GROUP" or user.menu == "SEARCH_TEACHER":
             await self.model.update_user(
                 id=user.id, data=dict(search_additional=data.id, menu=search_day),
             )
-            await self.send_message(
-                chat_id=user.id,
-                text=text,
+            await query.message.edit_text(
+                text=edit_text,
                 reply_markup=await inline_keyboard_settings.choice_day_keyboard(),
             )
         else:
@@ -578,8 +586,7 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
                 reply_markup=await standard_keyboard.main_keyboard(),
             )
 
-    @staticmethod
-    async def _settings_subscribe_to_time(query: types.CallbackQuery) -> None:
+    async def _settings_subscribe_to_time(self, query: types.CallbackQuery) -> None:
         """
         Обрабатывает подписку. Выбор времени
 
@@ -587,9 +594,21 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
         :return:
         """
 
+        user_id = query.from_user.id
+        await self.model.update_user(
+            user_id, data=dict(menu="SUBSCRIBE_CHOICE_TIME"),
+        )
+        await query.message.delete()
+        await self.send_message(
+            chat_id=user_id,
+            text=strings.SUBSCRIBE_CHOICE_TIME_ONE,
+            reply_markup=ReplyKeyboardRemove(),
+        )
         keyboard = await inline_keyboard_settings.subscribe_choice_time_keyboard()
-        await query.message.edit_text(
-            strings.SUBSCRIBE_CHOICE_TIME, reply_markup=keyboard
+        await self.send_message(
+            chat_id=user_id,
+            text=strings.SUBSCRIBE_CHOICE_TIME_TWO,
+            reply_markup=keyboard,
         )
 
     async def _settings_unsubscribe(self, query: types.CallbackQuery) -> None:
@@ -666,11 +685,11 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
                 strings.DISPLAY_SCHEDULE, reply_markup=keyboard
             )
 
-    async def _subscribe_to_schedule(
+    async def _choice_day_schedule(
         self, query: types.CallbackQuery, callback_data: dict
     ) -> None:
         """
-        Обрабатывает подписки
+        Обрабатывает выбор дня
 
         :param query:
         :param callback_data:
@@ -690,27 +709,106 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
                 )
                 keyboard = await inline_keyboard_settings.choice_day_keyboard()
                 await query.message.edit_text(
-                    strings.WHAT_TO_SET, reply_markup=keyboard
+                    strings.DISPLAY_SCHEDULE, reply_markup=keyboard
                 )
+                # FIXME Каким то чудом придумать как скрывать клавиатуру :/
         elif callback_data["@"] == "sub_d":
             day = callback_data["day"]
-            if day == "Отмена":
-                self.loop.create_task(self._unsubscribe_to_schedule(user))
-                await query.message.edit_text(strings.UNSUBSCRIBE_SCHEDULE)
-            else:
-                self.loop.create_task(
-                    self.model.update_user(user.id, data=dict(subscription_days=day,),)
-                )
-                if day == "Эта неделя":
-                    day = "эту неделю"
-                elif day == "Следующая неделя":
-                    day = "следующую неделю"
+
+            if user.menu == "SEARCH_GROUP_DAY" or user.menu == "SEARCH_TEACHER_DAY":
+                if day == "Отмена":
+                    await query.message.edit_text(strings.CANCEL)
+                    await self.model.update_user(
+                        user.id, data=dict(menu="MAIN_MENU", search_additional=None,),
+                    )
+                    await self.send_message(
+                        chat_id=user.id,
+                        text=strings.CHOOSE_MENU,
+                        reply_markup=await standard_keyboard.main_keyboard(),
+                    )
                 else:
-                    day = day.lower()
-                await query.message.edit_text(
-                    f"Подписка на рассылку успешно сформирована\n\n"
-                    f"Теперь каждый день в {user.subscription_time} вы будете получать расписание на {day}"
-                )
+
+                    if day == "Эта неделя":
+                        start_day = -1
+                        days = 7
+                        day = "эту неделю"
+                    elif day == "Следующая неделя":
+                        start_day = -2
+                        days = 7
+                        day = "следующую неделю"
+                    elif day == "Текущий и следующий день":
+                        day = "этот и следующий день"
+                        start_day = 0
+                        days = 2
+                    elif day == "Текущий день":
+                        start_day = 0
+                        days = 1
+                        day = "этот день"
+                    elif day == "Следующий день":
+                        start_day = 1
+                        days = 1
+                        day = "следующий день"
+                    else:
+                        log.error(
+                            "Target [CHAT_ID:%s]: error name schedule on search other group/teacher",
+                            user.id,
+                        )
+                        raise NameError
+                    await self.model.update_user(
+                        user.id, data=dict(menu="MAIN_MENU", search_additional=None,),
+                    )
+
+                    if user.menu == "SEARCH_GROUP_DAY":
+                        search_type = "student"
+                    else:
+                        search_type = "teacher"
+                    await query.answer(f"Загружаем расписание")
+                    await query.message.delete()
+                    schedule = await self.get_schedule(
+                        user=user,
+                        start_day=start_day,
+                        days=days,
+                        search_id=int(user.search_additional),
+                        search_type=search_type,
+                        text=f"Расписание на {day}\n\n",
+                    )
+                    await self.send_message(
+                        chat_id=user.id,
+                        text=schedule + [strings.CHOOSE_MENU],
+                        reply_markup=await standard_keyboard.main_keyboard(),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+            else:  # Подписки
+                if day == "Отмена":
+                    self.loop.create_task(self._unsubscribe_to_schedule(user))
+                    await query.message.edit_text(strings.UNSUBSCRIBE_SCHEDULE)
+                    await self.send_message(
+                        chat_id=user.id,
+                        text=strings.CHOOSE_MENU,
+                        reply_markup=await standard_keyboard.main_keyboard(),
+                    )
+                else:
+                    self.loop.create_task(
+                        self.model.update_user(
+                            user.id, data=dict(subscription_days=day, menu="MAIN_MENU"),
+                        )
+                    )
+                    if day == "Эта неделя":
+                        day = "эту неделю"
+                    elif day == "Следующая неделя":
+                        day = "следующую неделю"
+                    else:
+                        day = day.lower()
+
+                    await query.message.delete()
+                    keyboard = await standard_keyboard.main_keyboard()
+                    await self.send_message(
+                        chat_id=user.id,
+                        text=f"Подписка на рассылку успешно сформирована\n\n"
+                        f"Теперь каждый день в {user.subscription_time} вы будете получать расписание на {day}\n\n"
+                        + strings.WHAT_TO_SET,
+                        reply_markup=keyboard,
+                    )
 
     async def _unsubscribe_to_schedule(self, user: User) -> None:
         """
@@ -897,8 +995,7 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
             ),
         )
 
-    @staticmethod
-    async def _schedule_specific_group(query: types.CallbackQuery) -> None:
+    async def _schedule_specific_group(self, query: types.CallbackQuery) -> None:
         """
         Обрабатывает расписание для опеределнной группы
 
@@ -906,10 +1003,18 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
         :return:
         """
 
-        pass
+        user_id = query.from_user.id
+        await query.message.delete()
+        await self.model.update_user(
+            user_id, data=dict(menu="SEARCH_GROUP", search_additional="CHANGES",),
+        )
+        await self.send_message(
+            chat_id=user_id,
+            text=strings.WRITE_GROUP,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
-    @staticmethod
-    async def _schedule_specific_teacher(query: types.CallbackQuery) -> None:
+    async def _schedule_specific_teacher(self, query: types.CallbackQuery) -> None:
         """
         Обрабатывает расписание для определенного преподавателя
 
@@ -917,4 +1022,13 @@ class BotDispatcher(Dispatcher, BotScheduleHelper):
         :return:
         """
 
-        pass
+        user_id = query.from_user.id
+        await query.message.delete()
+        await self.model.update_user(
+            user_id, data=dict(menu="SEARCH_TEACHER", search_additional="CHANGES",),
+        )
+        await self.send_message(
+            chat_id=user_id,
+            text=strings.WRITE_TEACHER,
+            reply_markup=ReplyKeyboardRemove(),
+        )

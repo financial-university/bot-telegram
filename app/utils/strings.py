@@ -56,14 +56,17 @@ SHOW_LOCATION = "Корпус в расписании"
 
 SUBSCRIBE_URL = "https://schedule.fa.ru/"
 
-SUBSCRIBE_CHOICE_TIME = "Напишите или выберите время в которое хотите получать раписание\n\nНапример: «12:35»"
+SUBSCRIBE_CHOICE_TIME_ONE = (
+    "Напишите время в которое хотите получать раписание\nНапример: «12:35»"
+)
+SUBSCRIBE_CHOICE_TIME_TWO = "Или выберите ниже"
 UNSUBSCRIBE_SCHEDULE = "Вы отписались от рассылки расписания"
 
 DISPLAY_SCHEDULE = "Выберите, что вам следует показывать в расписании"
 
 SELECT_DAY_IN_CALENDAR = "Выберите дату в календаре"
 
-MONTHS = [
+CALENDAR_MONTHS = [
     "Январь",
     "Февраль",
     "Март",
@@ -77,7 +80,7 @@ MONTHS = [
     "Ноябрь",
     "Декабрь",
 ]
-DAYS = [" Пн ", " Вт ", " Ср ", " Чт ", " Пт ", " Сб ", " Вс "]
+CALENDAR_DAYS = [" Пн ", " Вт ", " Ср ", " Чт ", " Пт ", " Сб ", " Вс "]
 
 MESSAGE_DELETED = "Сообщение уже удалено"
 LOAD_SCHEDULE = "Загружаем расписание"

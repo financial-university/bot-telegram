@@ -1,10 +1,9 @@
-import datetime
-import logging
 import ssl
 import certifi
-
+import datetime
+import logging
+from asyncio import sleep
 from urllib.parse import quote
-from typing import NamedTuple, Any
 
 import ujson
 from aiocache import cached
@@ -12,42 +11,13 @@ from aiocache.serializers import PickleSerializer
 from aiohttp import ClientSession, ClientError
 from marshmallow import ValidationError
 
-from app.ruz.schemas import ScheduleSchema
+from app.ruz.schemas import ScheduleSchema, Data, Group, Teacher
 
 SCHEDULE_SCHEMA = ScheduleSchema()
 
 log = logging.getLogger(__name__)
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
-
-
-class Group(NamedTuple):
-    id: str
-    name: str
-
-
-class Teacher(NamedTuple):
-    id: str
-    name: str
-
-
-class Data:
-    """
-    Объект данных, полученных с портала
-    """
-
-    data: Any
-    has_error: bool
-    error_text: str
-
-    def __init__(self, data: any, has_error: bool = False, error: str = None) -> None:
-        self.data = data
-        self.has_error = has_error
-        self.error_text = error
-
-    @classmethod
-    def error(cls, error: str) -> "Data":
-        return cls(data={}, has_error=True, error=error)
 
 
 def date_name(date: datetime) -> str:
@@ -80,13 +50,11 @@ async def get_group(group_name: str) -> Data:
 
     try:
         async with ClientSession() as client:
-            request = await client.get(
-                f"https://ruz.fa.ru/api/search?term={quote(group_name)}&type=group",
-                timeout=2,
-                ssl=ssl_context,
-            )
+            url = f"https://ruz.fa.ru/api/search?term={quote(group_name)}&type=group"
+            request = await client.get(url, timeout=2, ssl=ssl_context,)
             response_json = await request.json(loads=ujson.loads)
-    except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
+    except (ClientError, TimeoutError):
+        log.warning("Timeout error %s", url)
         return Data.error("Timeout error")
     if response_json:
         return Data(
@@ -110,13 +78,13 @@ async def get_teacher(teacher_name: str) -> Data:
 
     try:
         async with ClientSession() as client:
-            response = await client.get(
-                f"https://ruz.fa.ru/api/search?term={quote(teacher_name)}&type=lecturer",
-                timeout=2,
-                ssl=ssl_context,
+            url = (
+                f"https://ruz.fa.ru/api/search?term={quote(teacher_name)}&type=lecturer"
             )
+            response = await client.get(url, timeout=2, ssl=ssl_context,)
             response_json = await response.json(loads=ujson.loads)
-    except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
+    except (ClientError, TimeoutError):
+        log.warning("Timeout error %s", url)
         return Data.error("Timeout error")
     if response_json:
         return Data(
@@ -151,14 +119,15 @@ async def get_schedule(
         async with ClientSession() as client:
             response = await client.get(url, ssl=ssl_context)
             response_json = await response.json(loads=ujson.loads)
-    except (ClientError,):  # FIXME Такое работать не будет. Не то наследование
+    except (ClientError, TimeoutError):
+        log.warning("Timeout error %s", url)
         return Data.error("Timeout error")
     try:
         res = SCHEDULE_SCHEMA.load({"pairs": response_json})
         return Data(res)
     except ValidationError as e:
         log.warning("Validation error in get_schedule for %s %s - %r", type, id, e)
-        return Data.error("validation error")
+        return Data.error("Validation error")
 
 
 # 2 минуты

@@ -11,6 +11,7 @@ from aiomisc.service.base import Service
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiomisc.service.aiohttp import AIOHTTPService
 from aiohttp.web_request import Request
+from aiohttp.web import Response
 
 from app.dispatcher import BotDispatcher
 from app.dependency import Connection
@@ -171,7 +172,8 @@ class BotSubscriptionService(Service):
                                 chat_id=user.id,
                                 text=await self.dispatcher.get_schedule(
                                     user=user,
-                                    days=6,
+                                    start_day=-1,
+                                    days=7,
                                     search_id=int(user.subscription_id),
                                     search_type=user.role,
                                     show_location=user.show_location,
@@ -187,7 +189,7 @@ class BotSubscriptionService(Service):
                                 chat_id=user.id,
                                 text=await self.dispatcher.get_schedule(
                                     user=user,
-                                    start_day=7,
+                                    start_day=-2,
                                     days=7,
                                     search_id=int(user.subscription_id),
                                     search_type=user.role,
@@ -222,7 +224,7 @@ class RESTfulService(AIOHTTPService):
 
         return app
 
-    async def handler_user_count(self, request: Request) -> "Response":
+    async def handler_user_count(self, request: Request) -> Response:
         """
         Обрабатывает запрос кол-ва человек в базе /api/users_count
 

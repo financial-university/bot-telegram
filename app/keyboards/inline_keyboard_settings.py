@@ -39,8 +39,11 @@ async def settings(user: User) -> InlineKeyboardMarkup:
     if (
         user.role
         and user.search_id
-        and user.subscription_time is None
-        or user.subscription_time == "CHANGES"
+        and (
+            user.subscription_time is None
+            or user.subscription_id is None
+            or user.subscription_time is None
+        )
     ):
         keyboard_markup.row(
             InlineKeyboardButton(

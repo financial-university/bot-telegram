@@ -4,7 +4,7 @@ import calendar
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.callback_data import CallbackData
 
-from app.utils.strings import MONTHS, DAYS
+from app.utils.strings import CALENDAR_MONTHS, CALENDAR_DAYS
 
 calendar_callback = CallbackData("ca", "action", "year", "month", "day")
 
@@ -29,7 +29,7 @@ async def create_calendar(year: int = None, month: int = None) -> InlineKeyboard
 
     keyboard_markup.row(
         InlineKeyboardButton(
-            MONTHS[month - 1] + " " + str(year),
+            CALENDAR_MONTHS[month - 1] + " " + str(year),
             callback_data=calendar_callback.new(
                 action="Месяца", year=year, month=month, day="!"
             ),
@@ -44,7 +44,7 @@ async def create_calendar(year: int = None, month: int = None) -> InlineKeyboard
                     action="Исключение", year=year, month=month, day="!"
                 ),
             )
-            for day in DAYS
+            for day in CALENDAR_DAYS
         ]
     )
 
@@ -120,7 +120,7 @@ async def create_months_calendar(year: int = None) -> InlineKeyboardMarkup:
 
     keyboard_markup = InlineKeyboardMarkup()
 
-    for i, month in enumerate(zip(MONTHS[0::2], MONTHS[1::2])):
+    for i, month in enumerate(zip(CALENDAR_MONTHS[0::2], CALENDAR_MONTHS[1::2])):
         keyboard_markup.row(
             InlineKeyboardButton(
                 month[0],

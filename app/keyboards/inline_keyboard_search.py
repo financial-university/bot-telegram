@@ -103,5 +103,4 @@ async def list_teacher(teachers: List[Teacher]) -> types.InlineKeyboardMarkup:
             "Не нашли? Проверьте на RUZ", url="http://ruz.fa.ru/ruz"
         ),
     )
-    print(keyboard_markup)
     return keyboard_markup

@@ -1,6 +1,44 @@
+from typing import NamedTuple, Any
 from datetime import datetime
 
 from marshmallow import fields, Schema, EXCLUDE, pre_load, post_load
+
+
+class Group(NamedTuple):
+    """
+    Объект данных группы
+    """
+
+    id: str
+    name: str
+
+
+class Teacher(NamedTuple):
+    """
+    Объект данных преподавателя
+    """
+
+    id: str
+    name: str
+
+
+class Data:
+    """
+    Объект данных, полученных с портала
+    """
+
+    data: Any
+    has_error: bool
+    error_text: str
+
+    def __init__(self, data: any, has_error: bool = False, error: str = None) -> None:
+        self.data = data
+        self.has_error = has_error
+        self.error_text = error
+
+    @classmethod
+    def error(cls, error: str) -> "Data":
+        return cls(data={}, has_error=True, error=error)
 
 
 class DefaultString(fields.String):

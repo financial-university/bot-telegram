@@ -125,7 +125,7 @@ class Model:
             if user is None:
                 await connection.execute(User.add_user(id))
                 user = User(id=id)
-        return user
+            return user
 
     async def update_user(self, id: int, data: dict) -> None:
         """

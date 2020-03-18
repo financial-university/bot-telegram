@@ -85,6 +85,10 @@ class Pair(Schema):
     )
     date = DateField()
     note = fields.String(allow_none=True)
+    url1 = DefaultString(default="")
+    url1_description = DefaultString(default="")
+    url2 = DefaultString(default="")
+    url2_description = DefaultString(default="")
 
     class Meta:
         unknown = EXCLUDE

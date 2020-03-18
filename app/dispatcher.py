@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import ParseMode
 from aiogram.utils import exceptions
 from aiogram.types.reply_keyboard import ReplyKeyboardRemove
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 from aiogram.utils.parts import safe_split_text
 
@@ -80,7 +81,7 @@ class BotHelper:
         chat_id: int,
         text: str or list,
         parse_mode: str = None,
-        disable_web_page_preview: bool = None,
+        disable_web_page_preview: bool = True,
         disable_notification: bool = None,
         reply_to_message_id: int = None,
         reply_markup=None,
@@ -140,14 +141,17 @@ class BotHelper:
 class BotDispatcher(Dispatcher, BotHelper):
     bot: Bot
     model: Model
+    storage: MemoryStorage
 
-    def __init__(self, bot: Bot, db: Connection):
-        super().__init__(bot)
+    def __init__(
+        self, bot: Bot, db: Connection, storage: MemoryStorage = MemoryStorage()
+    ):
+        super().__init__(bot, storage=storage)
         self.model = Model(db)
 
         # START/RESTART BOT
         self.register_message_handler(
-            self.start_message, commands=["start", "restart", "старт"]
+            self.start_message, commands=["start", "restart", "старт"],
         )
 
         # CHANGE ROLE
@@ -365,6 +369,8 @@ class BotDispatcher(Dispatcher, BotHelper):
                 await self.send_message(
                     chat_id=user.id, text="Выберите другое время",
                 )
+        elif user.menu == "START":
+            await self.start_message(message)
         else:
             log.warning("Target [CHAT_ID:%s]: not found menu", user.id)
 
@@ -635,7 +641,8 @@ class BotDispatcher(Dispatcher, BotHelper):
         user = await self.model.get_user(query.from_user.id)
 
         keyboard = await inline_keyboard_settings.display_in_schedule(
-            show_groups=user.show_groups, show_location=user.show_location
+            show_groups=True if user.show_groups == 1 else False,
+            show_location=True if user.show_location == 1 else False,
         )
         await query.message.edit_text(strings.DISPLAY_SCHEDULE, reply_markup=keyboard)
 
@@ -666,8 +673,8 @@ class BotDispatcher(Dispatcher, BotHelper):
         user = await self.model.get_user(query.from_user.id)
         menu = callback_data["menu"]
         if any(item == menu for item in ("Место в расписании", "Группы в расписании")):
-            show_groups = user.show_groups
-            show_location = user.show_location
+            show_groups = True if user.show_groups == 1 else False
+            show_location = True if user.show_location == 1 else False
             if menu == "Место в расписании":
                 show_location = False if show_location is True else True
                 await self.model.update_user(
@@ -711,7 +718,6 @@ class BotDispatcher(Dispatcher, BotHelper):
                 await query.message.edit_text(
                     strings.DISPLAY_SCHEDULE, reply_markup=keyboard
                 )
-                # FIXME Каким то чудом придумать как скрывать клавиатуру :/
         elif callback_data["@"] == "sub_d":
             day = callback_data["day"]
 
@@ -806,7 +812,7 @@ class BotDispatcher(Dispatcher, BotHelper):
                         chat_id=user.id,
                         text=f"Подписка на рассылку успешно сформирована\n\n"
                         f"Теперь каждый день в {user.subscription_time} вы будете получать расписание на {day}\n\n"
-                        + strings.WHAT_TO_SET,
+                        + strings.CHOOSE_MENU,
                         reply_markup=keyboard,
                     )
 

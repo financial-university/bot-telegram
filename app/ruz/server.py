@@ -9,6 +9,7 @@ import ujson
 from aiocache import cached
 from aiocache.serializers import PickleSerializer
 from aiohttp import ClientSession, ClientError
+from aiogram.utils import markdown
 from marshmallow import ValidationError
 
 from app.ruz.schemas import ScheduleSchema, Data, Group, Teacher
@@ -192,6 +193,21 @@ async def format_schedule(
                 text += f"Кто: {lesson['teachers_name']}\n"
                 if lesson["note"]:
                     text += f'Примечание: {lesson["note"]}\n'
+                if lesson["url1"] or lesson["url2"]:
+                    if lesson["url1"] and lesson["url1_description"]:
+                        text += markdown.link(
+                            lesson["url1_description"], lesson["url1"]
+                        )
+                    if lesson["url1"] and lesson["url2"]:
+                        text += " • "
+                    else:
+                        text += "\n"
+                    if lesson["url2"] and lesson["url2_description"]:
+                        text += markdown.link(
+                            lesson["url2_description"], lesson["url2"]
+                        )
+                        text += "\n"
+
         else:
             text += f"Нет пар\n"
         text += "\n"
